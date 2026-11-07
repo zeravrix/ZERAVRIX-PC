@@ -17,15 +17,16 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import com.zeravrix.zeravrix.core.*
+import com.zeravrix.zeravrix.data.DesktopMangaLoaderContext
 import com.zeravrix.zeravrix.sources.LiveSourceRegistry
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import com.zeravrix.zeravrix.theme.createGlassTokens
 import com.zeravrix.zeravrix.theme.createMaterialColorScheme
 import com.zeravrix.zeravrix.ui.components.AppNavScreen
 import com.zeravrix.zeravrix.ui.components.AppNavigationRail
-import com.zeravrix.zeravrix.ui.components.MangaDetailDialog
+import com.zeravrix.zeravrix.ui.components.DetailsSplitPane
 import com.zeravrix.zeravrix.ui.components.WindowChrome
-import com.zeravrix.zeravrix.ui.reader.DesktopReaderView
+import com.zeravrix.zeravrix.ui.reader.PcReaderScreen
 import com.zeravrix.zeravrix.ui.screens.ExploreScreen
 import com.zeravrix.zeravrix.ui.screens.LibraryScreen
 import com.zeravrix.zeravrix.ui.screens.SettingsScreen
@@ -85,10 +86,11 @@ fun main() = application {
     val appDir = remember { Path.of(System.getProperty("user.home"), ".zeravrix") }
     remember { setupCrashDiagnostics(appDir) }
 
+    val loaderContext = remember { DesktopMangaLoaderContext(appDir) }
     val settingsStore = remember { SettingsStore(appDir) }
     var settings by remember { mutableStateOf(settingsStore.load()) }
     val libraryStore = remember { LibraryStore(appDir) }
-    val sourceRegistry = remember { LiveSourceRegistry(appDir) }
+    val sourceRegistry = remember { LiveSourceRegistry(appDir, loaderContext) }
 
     val scope = rememberCoroutineScope()
     var currentScreen by remember { mutableStateOf(AppNavScreen.LIBRARY) }
@@ -142,16 +144,16 @@ fun main() = application {
                         onReaderToggle = { /* focus reader */ }
                     )
 
-                    // Main App Workspace or Reader
+                    // Main App Workspace, Split-Pane Details, or Native PC Reader
                     if (activeReader != null) {
                         val session = activeReader!!
-                        DesktopReaderView(
+                        PcReaderScreen(
                             mangaTitle = session.manga.title,
                             chapterTitle = session.chapter.title,
                             pages = session.pages,
                             initialPage = session.initialPage,
-                            initialMode = settings.readerMode,
-                            onClose = { activeReader = null },
+                            loaderContext = loaderContext,
+                            onBack = { activeReader = null },
                             onPageChanged = { pageIndex ->
                                 libraryStore.saveProgress(
                                     ReadingProgress(
@@ -163,6 +165,35 @@ fun main() = application {
                                     )
                                 )
                             }
+                        )
+                    } else if (activeMangaForDetail != null) {
+                        val detailManga = activeMangaForDetail!!
+                        DetailsSplitPane(
+                            manga = detailManga,
+                            isFavourite = libraryStore.list().any { it.id == detailManga.id },
+                            onToggleFavourite = { m ->
+                                if (libraryStore.list().any { it.id == m.id }) {
+                                    libraryStore.remove(m.id)
+                                } else {
+                                    libraryStore.add(m)
+                                }
+                            },
+                            onOpenChapter = { m, chapter ->
+                                scope.launch {
+                                    val pages = sourceRegistry.fetchPages(chapter)
+                                    if (pages.isNotEmpty()) {
+                                        activeReader = ActiveReaderSession(
+                                            manga = m,
+                                            chapter = chapter,
+                                            pages = pages,
+                                            initialPage = 0
+                                        )
+                                    }
+                                }
+                            },
+                            sourceRegistry = sourceRegistry,
+                            loaderContext = loaderContext,
+                            onBack = { activeMangaForDetail = null }
                         )
                     } else {
                         Row(modifier = Modifier.fillMaxSize()) {
@@ -259,31 +290,6 @@ fun main() = application {
                             }
                         }
                     }
-                }
-
-                // Manga Detail & Chapter Select Dialog
-                if (activeMangaForDetail != null) {
-                    val manga = activeMangaForDetail!!
-                    MangaDetailDialog(
-                        manga = manga,
-                        sourceRegistry = sourceRegistry,
-                        libraryStore = libraryStore,
-                        onDismiss = { activeMangaForDetail = null },
-                        onReadChapter = { chapter ->
-                            scope.launch {
-                                val pages = sourceRegistry.fetchPages(chapter)
-                                if (pages.isNotEmpty()) {
-                                    activeMangaForDetail = null
-                                    activeReader = ActiveReaderSession(
-                                        manga = manga,
-                                        chapter = chapter,
-                                        pages = pages,
-                                        initialPage = 0
-                                    )
-                                }
-                            }
-                        }
-                    )
                 }
             }
         }

@@ -27,7 +27,9 @@ data class GlassTokens(
     val accent: Color,
     val isDark: Boolean,
     val isAmoled: Boolean,
-)
+) {
+    val accentGlow: Color get() = accent.copy(alpha = 0.65f)
+}
 
 val LocalGlassTokens = compositionLocalOf {
     createGlassTokens(ColorTheme.INDIGO_NIGHT, AppTheme.DARK, false)

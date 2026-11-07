@@ -3,36 +3,70 @@ package com.zeravrix.zeravrix.sources
 import com.zeravrix.zeravrix.core.Chapter
 import com.zeravrix.zeravrix.core.Manga
 import com.zeravrix.zeravrix.core.MangaPage
+import com.zeravrix.zeravrix.data.DesktopMangaLoaderContext
 import com.zeravrix.zeravrix.source.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * High-performance registry of built-in live API and web sources.
- * Replaces legacy dynamic JAR extension stores with fast, zero-delay live scrapers.
+ * Seamlessly integrates both native zero-delay Mihon scrapers and Kotatsu parsers.
  */
-class LiveSourceRegistry(appDir: Path) {
-    val sources: List<Source> = listOf(
-        MangalekMihonSource(),
-        MangaSparkMihonSource(),
-        TeamXMihonSource(),
-        MangaSwatMihonSource(),
-        AzoraMihonSource(),
-        HijalaMihonSource(appDir),
-        DilarMihonSource(),
-        KomgaSource(appDir),
-        KavitaSource(appDir),
-    )
+class LiveSourceRegistry(
+    appDir: Path,
+    val loaderContext: DesktopMangaLoaderContext? = null
+) {
+    val sources: List<Source> = buildList {
+        add(MangalekMihonSource())
+        add(MangaSparkMihonSource())
+        add(TeamXMihonSource())
+        add(MangaSwatMihonSource())
+        add(AzoraMihonSource())
+        add(HijalaMihonSource(appDir))
+        add(DilarMihonSource())
+        add(KomgaSource(appDir))
+        add(KavitaSource(appDir))
+
+        if (loaderContext != null) {
+            val kotatsuCurated = listOf(
+                MangaParserSource.MANGADEX,
+                MangaParserSource.MANGASEE,
+                MangaParserSource.FLAMECOMICS,
+                MangaParserSource.ASURASCANS,
+                MangaParserSource.MANGAKAKALOT,
+                MangaParserSource.WEBTOONS_EN,
+                MangaParserSource.BATOTO,
+                MangaParserSource.COMICK_FUN
+            ).filter { !it.isBroken }
+            .map { KotatsuSourceAdapter(it, loaderContext) }
+
+            addAll(kotatsuCurated)
+        }
+    }
 
     private val sourceMap = ConcurrentHashMap<Long, Source>().apply {
         sources.forEach { put(it.id, it) }
     }
 
-    fun get(id: Long): Source? = sourceMap[id]
+    fun get(id: Long): Source? {
+        val existing = sourceMap[id]
+        if (existing != null) return existing
+        if (loaderContext != null && id >= 10_000L) {
+            val ordinal = (id - 10_000L).toInt()
+            val parserSource = MangaParserSource.entries.getOrNull(ordinal)
+            if (parserSource != null) {
+                val adapter = KotatsuSourceAdapter(parserSource, loaderContext)
+                sourceMap[id] = adapter
+                return adapter
+            }
+        }
+        return null
+    }
 
     fun catalogueSources(): List<CatalogueSource> = sources.filterIsInstance<CatalogueSource>()
 

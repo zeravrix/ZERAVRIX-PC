@@ -10,11 +10,16 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.foundation)
     implementation(compose.material3)
+    implementation(compose.materialIconsExtended)
     implementation(compose.ui)
     implementation(project(":core"))
     implementation(project(":source-api"))
     implementation(project(":reader"))
+    implementation("com.github.KotatsuApp:kotatsu-parsers:4d1e521aef") {
+        exclude(group = "org.json", module = "json")
+    }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.21.2")
     implementation("org.json:json:20240303")

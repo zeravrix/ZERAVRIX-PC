@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -125,6 +127,81 @@ fun ExploreScreen(
             }
 
             Spacer(Modifier.weight(1f))
+
+            // Source Selector Dropdown
+            var sourceMenuExpanded by remember { mutableStateOf(false) }
+            val currentSourceName = sourceRegistry.sources.firstOrNull { it.id == selectedSourceId }?.name ?: "All Sources"
+
+            Box(modifier = Modifier.padding(end = 8.dp)) {
+                Surface(
+                    color = tokens.surfaceCard,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, tokens.borderGlass, RoundedCornerShape(14.dp))
+                        .clickable { sourceMenuExpanded = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            currentSourceName,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = tokens.accentGlow
+                        )
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = tokens.textMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = sourceMenuExpanded,
+                    onDismissRequest = { sourceMenuExpanded = false },
+                    modifier = Modifier
+                        .background(tokens.surfaceGlassRaised)
+                        .border(1.dp, tokens.borderGlass, RoundedCornerShape(8.dp))
+                        .heightIn(max = 380.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("All Sources (Aggregated)", color = tokens.textPrimary, fontWeight = FontWeight.Bold) },
+                        onClick = {
+                            selectedSourceId = null
+                            sourceMenuExpanded = false
+                        }
+                    )
+                    HorizontalDivider(color = tokens.borderGlass.copy(alpha = 0.5f))
+                    sourceRegistry.sources.forEach { src ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(src.name, color = tokens.textPrimary)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        src.language.uppercase(),
+                                        color = tokens.textMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            },
+                            onClick = {
+                                selectedSourceId = src.id
+                                sourceMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             // Refresh Button
             Surface(
