@@ -10,3 +10,9 @@ native/build/
 
 # JVM host distributions and generated test output
 jvm-host/build/
+
+# Packaging and archives
+*.zip
+*.exe
+*.msi
+

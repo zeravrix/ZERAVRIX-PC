@@ -28,13 +28,34 @@ compose.desktop {
         nativeDistributions {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
-                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
             )
             packageName = "ZERAVRIX"
             packageVersion = "1.4.0"
-            description = "ZERAVRIX 1.4.0 — native manga reader with persistent cache, progress resume, and selectable artwork themes."
+            description = "ZERAVRIX — Native Windows Manga, Manhua & Manhwa Reader"
             vendor = "Zeravrix Studio"
+            modules(
+                "java.base",
+                "java.desktop",
+                "java.logging",
+                "java.prefs",
+                "java.xml",
+                "java.datatransfer",
+                "jdk.crypto.ec",
+                "java.instrument",
+                "java.net.http",
+                "java.sql",
+                "jdk.jfr",
+                "jdk.jsobject",
+                "jdk.unsupported",
+                "jdk.unsupported.desktop",
+                "jdk.xml.dom",
+                "java.management",
+                "java.naming",
+                "java.security.jgss",
+                "java.scripting"
+            )
             windows {
+                iconFile.set(project.file("src/main/resources/logo.ico"))
                 menuGroup = "ZERAVRIX"
                 shortcut = true
                 dirChooser = true

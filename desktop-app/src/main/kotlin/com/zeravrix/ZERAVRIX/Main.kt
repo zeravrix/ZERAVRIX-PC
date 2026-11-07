@@ -111,16 +111,16 @@ private data class ReaderProgressTarget(val mangaId: String, val chapterId: Stri
 private val LocalAppLanguage = staticCompositionLocalOf { AppLanguage.ENGLISH }
 private val LocalCustomIconPath = staticCompositionLocalOf<String?> { null }
 
-private val PcBackground = Color(0xFF101216)
-private val PcSurface = Color(0xFF1A1D23)
-private val PcSurfaceRaised = Color(0xFF24272E)
-private val PcSurfaceSoft = Color(0xFF2B2E35)
-private val PcText = Color(0xFFF1F2F5)
-private val PcMuted = Color(0xFFA9ADB8)
-private val PcBlue = Color(0xFF8DBAFF)
-private val PcBlueStrong = Color(0xFF2F67B6)
-private val PcBorder = Color(0xFF3B3F48)
-private val PcDanger = Color(0xFFFF8A8A)
+private val PcBackground = Color(0xFF080B12)
+private val PcSurface = Color(0xDD0D1322)
+private val PcSurfaceRaised = Color(0xEE131A2B)
+private val PcSurfaceSoft = Color(0xF0182238)
+private val PcText = Color(0xFFF1F4F9)
+private val PcMuted = Color(0xFF8E9BB0)
+private val PcBlue = Color(0xFF00D2FF)
+private val PcBlueStrong = Color(0xFF1D72FE)
+private val PcBorder = Color(0x3300D2FF)
+private val PcDanger = Color(0xFFFF4D6D)
 private val LightBackground = Color(0xFFF7F9FF)
 private val LightSurface = Color(0xFFFFFFFF)
 private val LightSurfaceRaised = Color(0xFFEAF1FF)
@@ -307,7 +307,32 @@ private val PcDarkScheme = darkColorScheme(
     error = PcDanger,
 )
 
+private fun setupCrashLogging() {
+    val appDir = Path.of(System.getProperty("user.home"), ".zeravrix")
+    runCatching {
+        Files.createDirectories(appDir)
+        val crashLog = appDir.resolve("crash.log")
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            val msg = buildString {
+                appendLine("[$timestamp] Uncaught exception in thread '${thread.name}':")
+                appendLine(throwable.stackTraceToString())
+            }
+            System.err.println(msg)
+            runCatching {
+                Files.writeString(
+                    crashLog,
+                    msg,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND
+                )
+            }
+        }
+    }
+}
+
 fun main() = application {
+    setupCrashLogging()
     val appDir = Path.of(System.getProperty("user.home"), ".zeravrix")
     Files.createDirectories(appDir.resolve("sources"))
     Files.createDirectories(appDir.resolve("cache"))
@@ -489,7 +514,7 @@ fun main() = application {
         state = mainWindowState,
         icon = appIconPainter,
         undecorated = true,
-        resizable = false,
+        resizable = true,
     ) {
         MaterialTheme(colorScheme = when {
             settings.artworkTheme == ArtworkTheme.SPIDER_VERSE -> PcSpiderScheme
@@ -513,9 +538,9 @@ fun main() = application {
                                 ArtworkTheme.SPIDER_VERSE -> Color(0xFFFF4E73).copy(alpha = .72f)
                                 ArtworkTheme.ALUCARD -> Color(0xFFFF3B30).copy(alpha = .78f)
                                 ArtworkTheme.ATTACK_ON_TITAN -> Color(0xFFFFC107).copy(alpha = .82f)
-                                ArtworkTheme.NONE -> PcBlue.copy(alpha = .72f)
-                            }, RoundedCornerShape(14.dp))
-                            .clip(RoundedCornerShape(14.dp))
+                                ArtworkTheme.NONE -> Color(0x3300D2FF)
+                            }, if (mainWindowState.placement == WindowPlacement.Maximized) RoundedCornerShape(0.dp) else RoundedCornerShape(14.dp))
+                            .clip(if (mainWindowState.placement == WindowPlacement.Maximized) RoundedCornerShape(0.dp) else RoundedCornerShape(14.dp))
                     ) {
                     BrandedWindowChrome(
                         title = if (readerOpen) "Reader • $readerTitle" else "ZERAVRIX",
@@ -781,28 +806,37 @@ private fun WindowScope.BrandedWindowChrome(
     onReaderTab: () -> Unit = {},
     onClose: () -> Unit,
 ) {
-    val chromeShape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+    val chromeShape = RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
     WindowDraggableArea(
         Modifier.fillMaxWidth().height(52.dp)
             .clip(chromeShape)
-            .shadow(14.dp, chromeShape)
-            .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant)))
-            .border(1.dp, when (artworkTheme) { ArtworkTheme.SPIDER_VERSE -> Color(0xFFFF4E73).copy(alpha = .78f); ArtworkTheme.ALUCARD -> Color(0xFFFF3B30).copy(alpha = .78f); ArtworkTheme.ATTACK_ON_TITAN -> Color(0xFFF4C542).copy(alpha = .88f); ArtworkTheme.NONE -> PcBlue.copy(alpha = .72f) }, chromeShape),
+            .shadow(12.dp, chromeShape)
+            .background(Brush.horizontalGradient(listOf(Color(0xF20D1322), Color(0xDD131A2B), Color(0xF20D1322))))
+            .border(1.dp, when (artworkTheme) {
+                ArtworkTheme.SPIDER_VERSE -> Color(0xFFFF4E73).copy(alpha = .78f)
+                ArtworkTheme.ALUCARD -> Color(0xFFFF3B30).copy(alpha = .78f)
+                ArtworkTheme.ATTACK_ON_TITAN -> Color(0xFFF4C542).copy(alpha = .88f)
+                ArtworkTheme.NONE -> Color(0x3300D2FF)
+            }, chromeShape),
     ) {
-        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AppLogo(Modifier.size(34.dp).shadow(8.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp)))
-            Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.Center) {
-                Text("ZERAVRIX", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        Row(Modifier.fillMaxSize().padding(start = 14.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                AppLogo(Modifier.fillMaxSize())
+            }
+            Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.Center) {
+                Text("ZERAVRIX", color = Color(0xFF00D2FF), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.ExtraBold)
+                Text(title, color = PcMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
             if (showReaderTab) {
                 ChromeWindowButton("TAB", onReaderTab, artworkTheme = artworkTheme)
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(6.dp))
             }
             ChromeWindowButton("—", { windowState.isMinimized = true }, artworkTheme = artworkTheme)
-            Spacer(Modifier.width(4.dp))
-            ChromeWindowButton("□", { windowState.placement = if (windowState.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized }, artworkTheme = artworkTheme)
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(6.dp))
+            ChromeWindowButton(if (windowState.placement == WindowPlacement.Maximized) "❐" else "□", {
+                windowState.placement = if (windowState.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized
+            }, artworkTheme = artworkTheme)
+            Spacer(Modifier.width(6.dp))
             ChromeWindowButton("×", onClose, danger = true, artworkTheme = artworkTheme)
         }
     }
@@ -839,34 +873,51 @@ private fun ChromeWindowButton(label: String, onClick: () -> Unit, danger: Boole
 @Composable
 private fun PcNavigationRail(screen: Screen, language: AppLanguage, artworkTheme: ArtworkTheme = ArtworkTheme.NONE, onScreen: (Screen) -> Unit) {
     Column(
-        Modifier.width(232.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface).verticalScroll(rememberScrollState()).padding(18.dp),
+        Modifier.width(236.dp).fillMaxHeight()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xEE0D1322),
+                        Color(0xDD080B12),
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(Color(0x3300D2FF), Color(0x1000D2FF), Color(0x0500D2FF))
+                ),
+                shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
+            )
+            .verticalScroll(rememberScrollState())
+            .padding(18.dp),
         horizontalAlignment = Alignment.Start,
     ) {
-        Box {
+        Box(Modifier.padding(start = 4.dp)) {
             if (artworkTheme != ArtworkTheme.NONE) {
-                AppLogo(Modifier.size(58.dp).graphicsLayer(translationX = 2f, alpha = .35f).clip(RoundedCornerShape(14.dp)).background(Color(0x66FF3B6B), RoundedCornerShape(14.dp)))
+                AppLogo(Modifier.size(56.dp).graphicsLayer(translationX = 2f, alpha = .35f).clip(RoundedCornerShape(12.dp)).background(Color(0x66FF3B6B), RoundedCornerShape(12.dp)))
             }
-            AppLogo(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)))
+            AppLogo(Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)))
         }
-        Text("ZERAVRIX", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-        Text("BY U1M", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 3.dp))
-        Spacer(Modifier.height(28.dp))
+        Text("ZERAVRIX", color = Color(0xFFF1F4F9), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 10.dp, start = 4.dp))
+        Text("BY U1M", color = Color(0xFF00D2FF), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp, start = 4.dp))
+        Spacer(Modifier.height(26.dp))
         NavigationItem("◷", uiText(language, "History", "السجل", "Historique"), screen == Screen.LIBRARY) { onScreen(Screen.LIBRARY) }
         NavigationItem("✦", uiText(language, "New", "جديد", "Nouveautés"), screen == Screen.NEW) { onScreen(Screen.NEW) }
         NavigationItem("♡", uiText(language, "Favorites", "المفضلة", "Favoris"), false) { onScreen(Screen.LIBRARY) }
         NavigationItem("◈", uiText(language, "Explore", "استكشاف", "Explorer"), screen == Screen.SEARCH) { onScreen(Screen.SEARCH) }
         NavigationItem("⇩", uiText(language, "Downloads", "التنزيلات", "Téléchargements"), screen == Screen.DOWNLOADS) { onScreen(Screen.DOWNLOADS) }
         NavigationItem("♫", uiText(language, "My Music", "موسيقاي", "Ma musique"), screen == Screen.MUSIC) { onScreen(Screen.MUSIC) }
-        Spacer(Modifier.height(22.dp))
-        Text(uiText(language, "MANAGE", "إدارة", "GESTION"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+        Spacer(Modifier.height(20.dp))
+        Text(uiText(language, "MANAGE", "إدارة", "GESTION"), color = PcMuted.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
         NavigationItem("⌁", uiText(language, "Sources", "المصادر", "Sources"), screen == Screen.SOURCES) { onScreen(Screen.SOURCES) }
         NavigationItem("▦", uiText(language, "Extension stores", "متاجر الإضافات", "Dépôts d’extensions"), screen == Screen.EXTENSION_STORES) { onScreen(Screen.EXTENSION_STORES) }
         NavigationItem("⚙", uiText(language, "Settings", "الإعدادات", "Paramètres"), screen == Screen.SETTINGS) { onScreen(Screen.SETTINGS) }
         Spacer(Modifier.height(24.dp))
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text(APP_CONTENT_SCOPE, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge)
-                Text("Native Windows reader", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+        Surface(color = Color(0x33131A2B), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x2200D2FF)), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text(APP_CONTENT_SCOPE, color = Color(0xFFF1F4F9), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text("Native Windows reader", color = PcMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
@@ -880,17 +931,24 @@ private fun NavigationItem(icon: String, label: String, selected: Boolean, onCli
     val active = hovered || pressed
     Surface(
         color = when {
-            selected -> MaterialTheme.colorScheme.surfaceVariant
-            active -> MaterialTheme.colorScheme.primary.copy(alpha = .16f)
+            selected -> Color(0x2E00D2FF)
+            active -> Color(0x1400D2FF)
             else -> Color.Transparent
         },
-        contentColor = if (selected || active) MaterialTheme.colorScheme.onSurface else PcMuted,
-        shape = RoundedCornerShape(16.dp),
+        contentColor = if (selected) Color(0xFF00D2FF) else if (active) Color(0xFFF1F4F9) else PcMuted,
+        shape = RoundedCornerShape(12.dp),
+        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, Color(0x6600D2FF)) else if (active) androidx.compose.foundation.BorderStroke(1.dp, Color(0x2200D2FF)) else null,
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).hoverable(interactionSource).clickable(interactionSource, indication = null, onClick = onClick),
     ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, style = MaterialTheme.typography.titleLarge, color = if (selected || active) MaterialTheme.colorScheme.primary else PcMuted, modifier = Modifier.width(28.dp))
-            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (selected || active) FontWeight.SemiBold else FontWeight.Normal)
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(28.dp), contentAlignment = Alignment.CenterStart) {
+                Text(icon, style = MaterialTheme.typography.titleMedium, color = if (selected) Color(0xFF00D2FF) else if (active) Color(0xFF5CE1E6) else PcMuted)
+            }
+            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+            if (selected) {
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(5.dp).background(Color(0xFF00D2FF), RoundedCornerShape(3.dp)))
+            }
         }
     }
 }
@@ -898,33 +956,39 @@ private fun NavigationItem(icon: String, label: String, selected: Boolean, onCli
 @Composable
 private fun TopCommandBar(language: AppLanguage, query: String, onQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 30.dp, vertical = 22.dp),
+        Modifier.fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xB30D1322), Color(0x000D1322))
+                )
+            )
+            .padding(horizontal = 30.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f).height(58.dp).onPreviewKeyEvent {
+            modifier = Modifier.weight(1f).height(54.dp).onPreviewKeyEvent {
                 if (it.type == KeyEventType.KeyDown && it.key == Key.Enter) {
                     onSearch()
                     true
                 } else false
             },
             singleLine = true,
-            placeholder = { Text(uiText(language, "Search manga", "ابحث عن مانغا", "Rechercher un manga"), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            leadingIcon = { Text("⌕", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall) },
-            trailingIcon = { Text("⋮", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.headlineSmall) },
-            shape = RoundedCornerShape(30.dp),
+            placeholder = { Text(uiText(language, "Search manga, manhua, manhwa...", "ابحث عن مانغا، مانهوا، مانها...", "Rechercher manga, manhwa..."), color = PcMuted) },
+            leadingIcon = { Text("⌕", color = Color(0xFF00D2FF), style = MaterialTheme.typography.headlineSmall) },
+            trailingIcon = { Text("⋮", color = PcMuted, style = MaterialTheme.typography.headlineSmall) },
+            shape = RoundedCornerShape(27.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedContainerColor = Color(0x99131A2B),
+                unfocusedContainerColor = Color(0x66131A2B),
+                focusedBorderColor = Color(0x8800D2FF),
+                unfocusedBorderColor = Color(0x3300D2FF),
+                focusedTextColor = Color(0xFFF1F4F9),
+                unfocusedTextColor = Color(0xFFF1F4F9),
             ),
         )
-        Spacer(Modifier.width(18.dp))
+        Spacer(Modifier.width(16.dp))
         PillButton(uiText(language, "Search", "بحث", "Rechercher"), onSearch, emphasized = true)
         Spacer(Modifier.width(10.dp))
         PillButton(uiText(language, "Refresh", "تحديث", "Actualiser"), onRefresh)
@@ -2497,7 +2561,7 @@ private fun AppLogo(modifier: Modifier, mark: Boolean = false) {
             SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
         }.getOrNull()
     }
-    if (bitmap != null) androidx.compose.foundation.Image(bitmap, "ZERAVRIX logo", modifier, contentScale = ContentScale.Crop)
+    if (bitmap != null) androidx.compose.foundation.Image(bitmap, "ZERAVRIX logo", modifier, contentScale = ContentScale.Fit)
     else Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) { Text("ZX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
 }
 
