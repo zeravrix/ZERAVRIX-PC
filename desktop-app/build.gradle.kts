@@ -15,11 +15,9 @@ dependencies {
     implementation(project(":source-api"))
     implementation(project(":reader"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    implementation("org.openjfx:javafx-base:21:win")
-    implementation("org.openjfx:javafx-graphics:21:win")
-    implementation("org.openjfx:javafx-controls:21:win")
-    implementation("org.openjfx:javafx-swing:21:win")
-    implementation("org.openjfx:javafx-web:21:win")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jsoup:jsoup:1.21.2")
+    implementation("org.json:json:20240303")
 }
 
 compose.desktop {
@@ -30,7 +28,7 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
             )
             packageName = "ZERAVRIX"
-            packageVersion = "1.4.0"
+            packageVersion = "1.6.0"
             description = "ZERAVRIX — Native Windows Manga, Manhua & Manhwa Reader"
             vendor = "Zeravrix Studio"
             modules(
@@ -45,10 +43,8 @@ compose.desktop {
                 "java.net.http",
                 "java.sql",
                 "jdk.jfr",
-                "jdk.jsobject",
                 "jdk.unsupported",
                 "jdk.unsupported.desktop",
-                "jdk.xml.dom",
                 "java.management",
                 "java.naming",
                 "java.security.jgss",
@@ -56,7 +52,8 @@ compose.desktop {
             )
             windows {
                 iconFile.set(project.file("src/main/resources/logo.ico"))
-                menuGroup = "ZERAVRIX"
+                menuGroup = "ZERAVRIX Windows"
+                upgradeUuid = "a29d5873-51b8-4e3a-9762-cb07469a9b1a"
                 shortcut = true
                 dirChooser = true
                 perUserInstall = true

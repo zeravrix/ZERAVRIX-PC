@@ -20,13 +20,14 @@
 
 ### Key Capabilities
 
+* **Instant Native Launch:** Starts in under 500ms using a streamlined native Skia/Compose runtime with zero JVM bloat or artificial delays.
+* **13 Blueprint Themes Studio:** Full system customization including Indigo Night, Sakura, Matcha, Ember, Ocean, Lavender, Crimson, Aurora, Sunset, Graphite, Paper, Mono, and True AMOLED Void with instant preview and switching.
+* **Live Direct Sources:** Integrated Kotatsu-grade scrapers and live APIs (Mangalek, MangaSpark, Team X, MangaSwat, Azora, Hijala, Dilar, Komga, Kavita) for instant catalog browsing without complex JAR extension setup.
+* **Cyber-Glassmorphism UI:** Built following modern desktop design principles featuring frosted acrylic panels, smooth spring animations, unified window controls, and keyboard-first navigation (`Ctrl+K`).
 * **Tailored Webtoon & Manhwa Engine:** Continuous zero-gap vertical strip rendering, smooth inertia scrolling, automatic bottom-of-chapter continuous prefetch, and viewport-aware memory-bounded caching.
 * **Traditional Desktop Reader Modes:** Single-page, Double-page spread, Auto-spread based on window aspect ratio, LTR and RTL reading directions.
 * **Smart Memory Governor:** Byte-bounded in-memory LRU bitmap cache (`ImageBitmapLru`) and atomic disk cache (`PageCache`), preventing VRAM exhaustion and out-of-memory spikes even on massive 25,000+ px long-strip webtoon chapters.
-* **In-Reader OCR & Translation Tool:** Integrated on-screen drag-to-select translation dialog with multi-language OCR and translation support.
-* **Background Reading Soundtrack:** Integrated local audio player + Spotify Web API connection to soundtrack your reading sessions.
-* **Flexible Extensibility:** Modular source engine supporting built-in scrapers and dynamic desktop extension JAR loading.
-* **True Standalone Packaging:** Self-contained native Windows bundles (Portable `.zip` and standalone `.exe` setup installer) with zero runtime prerequisites on the user's system.
+* **True Standalone Packaging:** Self-contained native Windows bundles (Portable `.zip` and single standalone `.exe` setup installer) with zero runtime prerequisites on the user's system.
 
 ---
 
@@ -66,7 +67,7 @@ ZERAVRIX PC
 
 # 4. Generate Windows Standalone EXE Installer
 .\gradlew.bat :desktop-app:packageExe
-# Output: desktop-app/build/compose/binaries/main/exe/ZERAVRIX-1.4.0.exe
+# Output: desktop-app/build/compose/binaries/main/exe/ZERAVRIX-1.6.0.exe
 ```
 
 ---
