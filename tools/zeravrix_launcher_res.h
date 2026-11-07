@@ -1,0 +1,4 @@
+#ifndef ZERAVRIX_LAUNCHER_RES_H
+#define ZERAVRIX_LAUNCHER_RES_H
+#define IDI_ZERAVRIX 101
+#endif

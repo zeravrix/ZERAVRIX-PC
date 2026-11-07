@@ -1,0 +1,12 @@
+.gradle/
+build/
+out/
+.idea/
+*.iml
+.DS_Store
+
+# Native migration build output
+native/build/
+
+# JVM host distributions and generated test output
+jvm-host/build/

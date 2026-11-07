@@ -1,0 +1,7 @@
+# Source-to-Reader Pipeline Audit
+
+The active Kotlin models contain complete source identifiers and page request metadata: `Manga` has title, cover URL, description, genres, and source ID; `Chapter` has source ID, manga ID, title, number, volume, scanlator, and upload date; `MangaPage` has index, image URL, referer, headers, and chapter-end state.
+
+`HttpSource` uses Java HttpClient with redirects and a shared User-Agent, while individual sources add Accept-Language, JSON Accept, or page-specific headers. `PageCache` downloads each page to a hashed local file, preserves referer and source headers, uses atomic `.part` replacement, and returns cached files when present. The reader lazily caches nearby pages and appends the next chapter through `nextChapterLoader` in vertical mode.
+
+The remaining risks are source-specific. WordPress/Madara detail pages may be Cloudflare-blocked even when homepage latest cards load; chapter lists need a fallback from latest-card chapter links. Image extraction must use absolute `data-src`, `data-lazy-src`, `data-original`, and `src` URLs. MeshManga requires its public AppsWat JSON API for series metadata, chapters, and page image arrays. The Compose title dialog already loads details and chapters, but needs visible cover/metadata and robust errors. The reader should report failed page downloads explicitly, deduplicate continuation loads, and maintain full-page indexes across appended chapters.

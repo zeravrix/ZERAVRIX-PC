@@ -1,0 +1,11 @@
+ZERAVRIX PC LICENSE AND COPYRIGHT
+
+Copyright (c) 2026 U1M. All rights reserved.
+
+ZERAVRIX, the ZERAVRIX name, associated logos, supplied artwork arrangements, and the BY U1M brand presentation are owned by U1M unless a separate third-party notice applies.
+
+This installer grants the recipient a personal, non-exclusive license to install and use the ZERAVRIX PC application on compatible Windows x64 systems. The application is provided for manga, manhua, and manhwa reading. Source websites, extension repositories, artwork, and third-party libraries remain subject to their own licenses and terms.
+
+You may not sell, sublicense, misrepresent, or redistribute the ZERAVRIX branding or installer as your own product. Do not use the application to access content unlawfully or to bypass access controls. U1M makes no ownership claim over third-party source content.
+
+THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, TO THE MAXIMUM EXTENT PERMITTED BY LAW. U1M IS NOT LIABLE FOR LOSS OF DATA, SERVICE AVAILABILITY, OR THIRD-PARTY SOURCE CHANGES. Keep regular backups of your library and reading progress.
