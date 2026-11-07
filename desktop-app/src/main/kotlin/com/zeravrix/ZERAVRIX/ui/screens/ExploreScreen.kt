@@ -11,12 +11,13 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,20 +26,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.zeravrix.zeravrix.core.Chapter
 import com.zeravrix.zeravrix.core.Manga
+import com.zeravrix.zeravrix.sources.KotatsuSourceAdapter
 import com.zeravrix.zeravrix.sources.LiveSourceRegistry
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image as SkiaImage
+import org.koitharu.kotatsu.parsers.model.MangaParserSource
+import org.koitharu.kotatsu.parsers.model.SortOrder
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -47,45 +50,71 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 
+/**
+ * Replicates Kotatsu's layout-w600dp-land/fragment_explore.xml
+ * With:
+ * - 4 Action Buttons (Local, Bookmarks, Random, Downloads)
+ * - Pinned Sources Grid (72x72 favicon cards, title, pin badge)
+ * - Sources Catalog (100+ Kotatsu parsers, language filter, search, pin/unpin)
+ * - Source Remote Catalogue (RemoteListFragment: 13:18 manga grid, sort order, search, pagination)
+ */
 @Composable
 fun ExploreScreen(
     sourceRegistry: LiveSourceRegistry,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onOpenManga: (Manga) -> Unit,
+    onNavigateBookmarks: () -> Unit = {},
+    onNavigateDownloads: () -> Unit = {},
+    onNavigateLocal: () -> Unit = {},
 ) {
     val tokens = LocalGlassTokens.current
     val scope = rememberCoroutineScope()
-    var selectedCategory by remember { mutableStateOf("All") }
-    var selectedSourceId by remember { mutableStateOf<Long?>(null) }
-    var mangaList by remember { mutableStateOf<List<Manga>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
 
-    fun refreshContent() {
+    // Mode: "EXPLORE" (4 buttons + pinned sources), "CATALOG" (all 100+ sources), "SOURCE_VIEW" (manga from selected source)
+    var viewMode by remember { mutableStateOf("EXPLORE") }
+    var selectedSource by remember { mutableStateOf<KotatsuSourceAdapter?>(null) }
+    var sourceSortOrder by remember { mutableStateOf(SortOrder.POPULARITY) }
+    var sourcePage by remember { mutableStateOf(1) }
+    var sourceSearchQuery by remember { mutableStateOf("") }
+    var sourceMangaList by remember { mutableStateOf<List<Manga>>(emptyList()) }
+    var isLoadingSource by remember { mutableStateOf(false) }
+
+    // Pinned sources list
+    val allParsers = remember { sourceRegistry.getAllKotatsuParserSources() }
+    var pinnedParserNames by remember {
+        mutableStateOf(
+            setOf(
+                "MANGADEX",
+                "ASURASCANS",
+                "FLAMECOMICS",
+                "MANGAKAKALOT",
+                "MANGASEE",
+                "BATOTO",
+                "WEBTOONS_EN",
+                "COMICK_FUN"
+            )
+        )
+    }
+
+    // Sources catalog filters
+    var catalogSearch by remember { mutableStateOf("") }
+    var catalogLanguage by remember { mutableStateOf("ALL") }
+
+    // Load source remote list
+    fun loadSourceManga(source: KotatsuSourceAdapter, page: Int, order: SortOrder, query: String?) {
         scope.launch {
-            isLoading = true
-            mangaList = if (searchQuery.isNotBlank()) {
-                sourceRegistry.search(searchQuery, selectedSourceId)
-            } else {
-                sourceRegistry.fetchPopular(selectedSourceId)
-            }
-            isLoading = false
+            isLoadingSource = true
+            val res = source.fetchList(page = page, order = order, query = query)
+            sourceMangaList = res.items
+            isLoadingSource = false
         }
     }
 
-    LaunchedEffect(selectedSourceId, searchQuery) {
-        refreshContent()
-    }
-
-    val categories = listOf("All", "Manhwa", "Manhua", "Manga", "Action", "Romance", "Fantasy")
-
-    val filteredList = remember(mangaList, selectedCategory) {
-        if (selectedCategory == "All") mangaList
-        else mangaList.filter { manga ->
-            val matchType = selectedCategory.lowercase()
-            manga.genres.any { it.lowercase().contains(matchType) } ||
-                    manga.title.lowercase().contains(matchType) ||
-                    manga.description.lowercase().contains(matchType)
+    LaunchedEffect(selectedSource, sourcePage, sourceSortOrder, sourceSearchQuery) {
+        val src = selectedSource
+        if (src != null) {
+            loadSourceManga(src, sourcePage, sourceSortOrder, sourceSearchQuery.ifBlank { null })
         }
     }
 
@@ -94,159 +123,403 @@ fun ExploreScreen(
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 14.dp)
     ) {
-        // Top filter bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Category Chips
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.forEach { category ->
-                    val isSelected = selectedCategory == category
-                    Surface(
-                        color = if (isSelected) tokens.primary else tokens.surfaceCard,
-                        contentColor = if (isSelected) Color.Black else tokens.textPrimary,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .border(
-                                1.dp,
-                                if (isSelected) tokens.borderGlow else tokens.borderGlass,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .clickable { selectedCategory = category }
-                    ) {
-                        Text(
-                            category,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
+        when (viewMode) {
+            "EXPLORE" -> {
+                // Header
+                Text(
+                    "EXPLORE",
+                    color = tokens.primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.2.sp
+                )
+                Spacer(Modifier.height(14.dp))
 
-            Spacer(Modifier.weight(1f))
-
-            // Source Selector Dropdown
-            var sourceMenuExpanded by remember { mutableStateOf(false) }
-            val currentSourceName = sourceRegistry.sources.firstOrNull { it.id == selectedSourceId }?.name ?: "All Sources"
-
-            Box(modifier = Modifier.padding(end = 8.dp)) {
-                Surface(
-                    color = tokens.surfaceCard,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .border(1.dp, tokens.borderGlass, RoundedCornerShape(14.dp))
-                        .clickable { sourceMenuExpanded = true }
+                // 4 Action Buttons matching Kotatsu's item_explore_buttons.xml
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            currentSourceName,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = tokens.accentGlow
-                        )
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            tint = tokens.textMuted,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = sourceMenuExpanded,
-                    onDismissRequest = { sourceMenuExpanded = false },
-                    modifier = Modifier
-                        .background(tokens.surfaceGlassRaised)
-                        .border(1.dp, tokens.borderGlass, RoundedCornerShape(8.dp))
-                        .heightIn(max = 380.dp)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("All Sources (Aggregated)", color = tokens.textPrimary, fontWeight = FontWeight.Bold) },
+                    ExploreActionButton(
+                        title = "Local storage",
+                        icon = "📁",
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateLocal
+                    )
+                    ExploreActionButton(
+                        title = "Bookmarks",
+                        icon = "🔖",
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateBookmarks
+                    )
+                    ExploreActionButton(
+                        title = "Random manga",
+                        icon = "🎲",
+                        modifier = Modifier.weight(1f),
                         onClick = {
-                            selectedSourceId = null
-                            sourceMenuExpanded = false
+                            scope.launch {
+                                val popular = sourceRegistry.fetchPopular()
+                                val random = popular.randomOrNull()
+                                if (random != null) onOpenManga(random)
+                            }
                         }
                     )
-                    HorizontalDivider(color = tokens.borderGlass.copy(alpha = 0.5f))
-                    sourceRegistry.sources.forEach { src ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(src.name, color = tokens.textPrimary)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        src.language.uppercase(),
-                                        color = tokens.textMuted,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            },
+                    ExploreActionButton(
+                        title = "Downloads",
+                        icon = "⬇",
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateDownloads
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // Sources Section Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "PINNED SOURCES",
+                        color = tokens.textPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Button(
+                        onClick = { viewMode = "CATALOG" },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = tokens.surfaceContainerHigh,
+                            contentColor = tokens.primary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Sources Catalog (${allParsers.size})", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // Pinned Sources Grid matching Kotatsu item_explore_source_grid.xml
+                val pinnedParsers = allParsers.filter { it.name in pinnedParserNames }
+
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(pinnedParsers) { parser ->
+                        KotatsuSourceGridItem(
+                            parser = parser,
                             onClick = {
-                                selectedSourceId = src.id
-                                sourceMenuExpanded = false
+                                val adapter = sourceRegistry.getOrCreateAdapter(parser)
+                                if (adapter != null) {
+                                    selectedSource = adapter
+                                    sourcePage = 1
+                                    sourceSearchQuery = ""
+                                    viewMode = "SOURCE_VIEW"
+                                }
                             }
                         )
                     }
                 }
             }
 
-            // Refresh Button
-            Surface(
-                color = tokens.surfaceCard,
-                contentColor = tokens.primary,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, tokens.borderGlass, RoundedCornerShape(14.dp))
-                    .clickable { refreshContent() }
-            ) {
-                Text(
-                    "⟳ Refresh",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
+            "CATALOG" -> {
+                // Sources Catalog view
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { viewMode = "EXPLORE" },
+                        colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("← Back", fontSize = 12.sp)
+                    }
 
-        Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.width(16.dp))
 
-        // Content Area
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (isLoading && mangaList.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = tokens.primary)
-                }
-            } else if (filteredList.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No titles found", color = tokens.textPrimary, fontWeight = FontWeight.Bold)
-                        Text("Try selecting a different source or searching for another term", color = tokens.textMuted, fontSize = 12.sp)
+                    Text(
+                        "SOURCES CATALOG",
+                        color = tokens.primary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Language Selector
+                    val languages = listOf("ALL", "en", "ja", "ar", "ru", "es", "fr", "it", "ko", "zh")
+                    var langMenuExpanded by remember { mutableStateOf(false) }
+
+                    Box {
+                        OutlinedButton(
+                            onClick = { langMenuExpanded = true },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Language: $catalogLanguage", fontSize = 12.sp)
+                        }
+                        DropdownMenu(
+                            expanded = langMenuExpanded,
+                            onDismissRequest = { langMenuExpanded = false }
+                        ) {
+                            languages.forEach { lang ->
+                                DropdownMenuItem(
+                                    text = { Text(lang.uppercase()) },
+                                    onClick = {
+                                        catalogLanguage = lang
+                                        langMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
+
+                Spacer(Modifier.height(12.dp))
+
+                // Search sources input
+                OutlinedTextField(
+                    value = catalogSearch,
+                    onValueChange = { catalogSearch = it },
+                    placeholder = { Text("Search 100+ sources by name...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = tokens.primary,
+                        unfocusedBorderColor = tokens.outlineVariant,
+                    )
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                // Filtered sources
+                val filteredParsers = allParsers.filter { parser ->
+                    val matchName = catalogSearch.isBlank() || parser.title.contains(catalogSearch, ignoreCase = true)
+                    val matchLang = catalogLanguage == "ALL" || parser.locale.equals(catalogLanguage, ignoreCase = true)
+                    matchName && matchLang
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredList, key = { it.id }) { manga ->
-                        MangaCard(manga = manga, onClick = { onOpenManga(manga) })
+                    items(filteredParsers) { parser ->
+                        val isPinned = parser.name in pinnedParserNames
+                        Surface(
+                            color = tokens.surfaceContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                .clickable {
+                                    val adapter = sourceRegistry.getOrCreateAdapter(parser)
+                                    if (adapter != null) {
+                                        selectedSource = adapter
+                                        sourcePage = 1
+                                        sourceSearchQuery = ""
+                                        viewMode = "SOURCE_VIEW"
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Favicon
+                                Surface(
+                                    color = tokens.primaryContainer,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            parser.title.take(2).uppercase(),
+                                            color = tokens.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.width(14.dp))
+
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        parser.title,
+                                        color = tokens.textPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        "Locale: ${parser.locale.uppercase()}",
+                                        color = tokens.textMuted,
+                                        fontSize = 11.sp
+                                    )
+                                }
+
+                                // Pin / Unpin Button
+                                IconButton(
+                                    onClick = {
+                                        pinnedParserNames = if (isPinned) {
+                                            pinnedParserNames - parser.name
+                                        } else {
+                                            pinnedParserNames + parser.name
+                                        }
+                                    }
+                                ) {
+                                    Text(
+                                        if (isPinned) "📌" else "📍",
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            "SOURCE_VIEW" -> {
+                val src = selectedSource ?: return
+                // Top controls bar for RemoteListFragment
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { viewMode = "EXPLORE" },
+                        colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("← Sources", fontSize = 12.sp)
+                    }
+
+                    Spacer(Modifier.width(14.dp))
+
+                    Column {
+                        Text(
+                            src.name,
+                            color = tokens.textPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Page $sourcePage • ${src.language.uppercase()}",
+                            color = tokens.primary,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Sort Order Dropdown
+                    var sortMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(
+                            onClick = { sortMenuExpanded = true },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Sort: ${sourceSortOrder.name.lowercase().replaceFirstChar { it.uppercase() }}", fontSize = 12.sp)
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false }
+                        ) {
+                            SortOrder.entries.forEach { order ->
+                                DropdownMenuItem(
+                                    text = { Text(order.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                    onClick = {
+                                        sourceSortOrder = order
+                                        sourcePage = 1
+                                        sortMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Live search within source
+                OutlinedTextField(
+                    value = sourceSearchQuery,
+                    onValueChange = {
+                        sourceSearchQuery = it
+                        sourcePage = 1
+                    },
+                    placeholder = { Text("Search manga on ${src.name}...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = tokens.primary,
+                        unfocusedBorderColor = tokens.outlineVariant,
+                    )
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                if (isLoadingSource) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = tokens.primary)
+                    }
+                } else if (sourceMangaList.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No manga found for this query/source.", color = tokens.textMuted)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 140.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(sourceMangaList, key = { it.id }) { manga ->
+                            KotatsuMangaCard(
+                                manga = manga,
+                                onClick = { onOpenManga(manga) }
+                            )
+                        }
+                    }
+
+                    // Pagination Footer
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { if (sourcePage > 1) sourcePage-- },
+                            enabled = sourcePage > 1,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary)
+                        ) {
+                            Text("← Previous", fontSize = 12.sp)
+                        }
+
+                        Spacer(Modifier.width(20.dp))
+
+                        Text("Page $sourcePage", color = tokens.textPrimary, fontWeight = FontWeight.Bold)
+
+                        Spacer(Modifier.width(20.dp))
+
+                        Button(
+                            onClick = { sourcePage++ },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary)
+                        ) {
+                            Text("Next →", fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -254,148 +527,136 @@ fun ExploreScreen(
     }
 }
 
+/**
+ * 4 Action buttons matching Kotatsu item_explore_buttons.xml
+ */
 @Composable
-fun MangaCard(
+private fun ExploreActionButton(
+    title: String,
+    icon: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val tokens = LocalGlassTokens.current
+    Surface(
+        color = tokens.surfaceContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, fontSize = 18.sp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                title,
+                color = tokens.textPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * 72x72 Favicon source item matching Kotatsu item_explore_source_grid.xml
+ */
+@Composable
+private fun KotatsuSourceGridItem(
+    parser: MangaParserSource,
+    onClick: () -> Unit,
+) {
+    val tokens = LocalGlassTokens.current
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(6.dp)
+    ) {
+        // 72dp x 72dp Favicon View
+        Surface(
+            color = tokens.surfaceContainerHigh,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .size(72.dp)
+                .border(1.dp, tokens.outlineVariant, RoundedCornerShape(16.dp))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = parser.title.take(2).uppercase(),
+                    color = tokens.primary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text("📌", fontSize = 10.sp)
+            Spacer(Modifier.width(3.dp))
+            Text(
+                text = parser.title,
+                color = tokens.textPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * Kotatsu Manga Card with 13:18 aspect ratio cover
+ */
+@Composable
+private fun KotatsuMangaCard(
     manga: Manga,
     onClick: () -> Unit,
 ) {
     val tokens = LocalGlassTokens.current
-    val interaction = remember { MutableInteractionSource() }
-    val isHovered by interaction.collectIsHoveredAsState()
 
-    Surface(
-        color = tokens.surfaceCard,
-        shape = RoundedCornerShape(12.dp),
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(
-                1.dp,
-                if (isHovered) tokens.borderGlow else tokens.borderGlass,
-                RoundedCornerShape(12.dp)
-            )
-            .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .graphicsLayer(
-                scaleX = if (isHovered) 1.03f else 1f,
-                scaleY = if (isHovered) 1.03f else 1f
-            )
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
     ) {
-        Column {
-            // Cover Image Box
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.72f)
-                    .background(Color(0xFF141A29))
-            ) {
-                RemoteCoverImage(
-                    url = manga.coverUrl,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Glass Gradient Overlay at bottom
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Transparent, Color(0xCC000000))
-                            )
-                        )
-                )
-
-                // Status or type badge if present
-                manga.status?.takeIf { it.isNotBlank() }?.let { status ->
-                    Box(
-                        modifier = Modifier
-                            .padding(6.dp)
-                            .align(Alignment.TopEnd)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xDD000000))
-                            .border(1.dp, tokens.primary.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            status,
-                            color = tokens.primary,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            // Title & Info
-            Column(modifier = Modifier.padding(10.dp)) {
-                Text(
-                    manga.title,
-                    color = tokens.textPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    manga.author ?: manga.genres.firstOrNull() ?: "Webtoon",
-                    color = tokens.textMuted,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-private val CoverCache = HashMap<String, androidx.compose.ui.graphics.ImageBitmap>()
-private val HttpCoverClient by lazy {
-    HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
-}
-
-@Composable
-fun RemoteCoverImage(
-    url: String?,
-    modifier: Modifier = Modifier,
-) {
-    var bitmap by remember(url) { mutableStateOf(url?.let { CoverCache[it] }) }
-
-    LaunchedEffect(url) {
-        if (url.isNullOrBlank() || bitmap != null) return@LaunchedEffect
-        withContext(Dispatchers.IO) {
-            val bytes = runCatching {
-                val req = HttpRequest.newBuilder(URI(url))
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZERAVRIX/1.6")
-                    .GET().build()
-                HttpCoverClient.send(req, HttpResponse.BodyHandlers.ofByteArray()).takeIf { it.statusCode() == 200 }?.body()
-            }.getOrNull()
-
-            if (bytes != null && bytes.isNotEmpty()) {
-                val skiaBmp = runCatching { SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
-                if (skiaBmp != null) {
-                    CoverCache[url] = skiaBmp
-                    bitmap = skiaBmp
-                }
-            }
-        }
-    }
-
-    if (bitmap != null) {
-        Image(
-            bitmap = bitmap!!,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = modifier
-        )
-    } else {
-        Box(
-            modifier = modifier.background(Color(0xFF131A2B)),
-            contentAlignment = Alignment.Center
+        // 13:18 Aspect Ratio Cover
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = tokens.surfaceContainerHigh,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(13f / 18f)
+                .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
         ) {
-            Text("ZX", color = Color(0x3300D2FF), fontWeight = FontWeight.Black, fontSize = 24.sp)
+            RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
         }
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            text = manga.title,
+            color = tokens.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

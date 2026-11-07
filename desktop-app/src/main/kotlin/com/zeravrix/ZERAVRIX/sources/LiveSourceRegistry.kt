@@ -68,6 +68,20 @@ class LiveSourceRegistry(
         return null
     }
 
+    fun getAllKotatsuParserSources(): List<MangaParserSource> {
+        return MangaParserSource.entries.filter { !it.isBroken }
+    }
+
+    fun getOrCreateAdapter(parserSource: MangaParserSource): KotatsuSourceAdapter? {
+        if (loaderContext == null) return null
+        val id = 10_000L + parserSource.ordinal
+        val existing = sourceMap[id] as? KotatsuSourceAdapter
+        if (existing != null) return existing
+        val adapter = KotatsuSourceAdapter(parserSource, loaderContext)
+        sourceMap[id] = adapter
+        return adapter
+    }
+
     fun catalogueSources(): List<CatalogueSource> = sources.filterIsInstance<CatalogueSource>()
 
     suspend fun fetchPopular(sourceId: Long? = null, page: Int = 1): List<Manga> = withContext(Dispatchers.IO) {

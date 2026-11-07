@@ -13,9 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zeravrix.zeravrix.core.LibraryStore
@@ -23,6 +23,9 @@ import com.zeravrix.zeravrix.core.Manga
 import com.zeravrix.zeravrix.core.ReadingProgress
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 
+/**
+ * Replicates Kotatsu Favourites / History Grid View
+ */
 @Composable
 fun LibraryScreen(
     libraryStore: LibraryStore,
@@ -49,12 +52,12 @@ fun LibraryScreen(
         if (latestProgress != null) {
             val (manga, progress) = latestProgress
             Surface(
-                color = tokens.surfaceCard,
+                color = tokens.surfaceContainer,
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, tokens.borderGlow, RoundedCornerShape(14.dp))
+                    .border(1.dp, tokens.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
                     .padding(14.dp)
             ) {
                 Row(
@@ -82,7 +85,8 @@ fun LibraryScreen(
                             color = tokens.textPrimary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -91,20 +95,12 @@ fun LibraryScreen(
                             fontSize = 12.sp
                         )
                     }
-                    Surface(
-                        color = tokens.primary,
-                        contentColor = Color.Black,
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onResumeReading(manga, progress) }
+                    Button(
+                        onClick = { onResumeReading(manga, progress) },
+                        colors = ButtonDefaults.buttonColors(containerColor = tokens.primary, contentColor = tokens.onPrimary),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text(
-                            "▶ Resume",
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
+                        Text("▶ Resume", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }
@@ -117,28 +113,19 @@ fun LibraryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "MY LIBRARY (${savedManga.value.size})",
+                "SAVED TITLES (${savedManga.value.size})",
                 color = tokens.textPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp
             )
             Spacer(Modifier.weight(1f))
-            Surface(
-                color = tokens.surfaceCard,
-                contentColor = tokens.primary,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, tokens.borderGlass, RoundedCornerShape(12.dp))
-                    .clickable { onExploreClick() }
+            Button(
+                onClick = { onExploreClick() },
+                colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.primary),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Text(
-                    "+ Explore Titles",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("+ Explore Titles", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -147,6 +134,8 @@ fun LibraryScreen(
         if (savedManga.value.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("📚", fontSize = 48.sp)
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         "Your library is empty",
                         color = tokens.textPrimary,
@@ -160,28 +149,20 @@ fun LibraryScreen(
                         fontSize = 12.sp
                     )
                     Spacer(Modifier.height(16.dp))
-                    Surface(
-                        color = tokens.primary,
-                        contentColor = Color.Black,
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onExploreClick() }
+                    Button(
+                        onClick = { onExploreClick() },
+                        colors = ButtonDefaults.buttonColors(containerColor = tokens.primary, contentColor = tokens.onPrimary),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(
-                            "Browse Popular Titles",
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
+                        Text("Browse Popular Titles", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 160.dp),
+                columns = GridCells.Adaptive(minSize = 140.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(savedManga.value, key = { it.id }) { manga ->
@@ -189,5 +170,45 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * 13:18 aspect ratio manga card matching Kotatsu item_manga_grid.xml
+ */
+@Composable
+fun MangaCard(
+    manga: Manga,
+    onClick: () -> Unit,
+) {
+    val tokens = LocalGlassTokens.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = tokens.surfaceContainerHigh,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(13f / 18f)
+                .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+        ) {
+            RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            text = manga.title,
+            color = tokens.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

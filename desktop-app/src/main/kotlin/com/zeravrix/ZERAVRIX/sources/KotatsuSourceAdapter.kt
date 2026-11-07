@@ -34,10 +34,15 @@ class KotatsuSourceAdapter(
 
     private val cachedMangaMap = ConcurrentHashMap<String, org.koitharu.kotatsu.parsers.model.Manga>()
 
-    override suspend fun popular(page: Int): MangaPageResult = withContext(Dispatchers.IO) {
+    suspend fun fetchList(
+        page: Int = 1,
+        order: SortOrder = SortOrder.POPULARITY,
+        query: String? = null
+    ): MangaPageResult = withContext(Dispatchers.IO) {
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
-            val list = parser.getList(offset = (page - 1) * 20, order = SortOrder.POPULARITY, filter = MangaListFilter())
+            val filter = if (!query.isNullOrBlank()) MangaListFilter(query = query) else MangaListFilter()
+            val list = parser.getList(offset = (page - 1) * 20, order = order, filter = filter)
             val items = list.map { m ->
                 cachedMangaMap[m.id.toString()] = m
                 m.toCoreManga(id)
@@ -45,6 +50,8 @@ class KotatsuSourceAdapter(
             MangaPageResult(items = items, hasNextPage = items.size >= 20)
         }.getOrElse { MangaPageResult(emptyList(), false) }
     }
+
+    override suspend fun popular(page: Int): MangaPageResult = fetchList(page, SortOrder.POPULARITY)
 
     override suspend fun latest(page: Int): MangaPageResult = withContext(Dispatchers.IO) {
         runCatching {

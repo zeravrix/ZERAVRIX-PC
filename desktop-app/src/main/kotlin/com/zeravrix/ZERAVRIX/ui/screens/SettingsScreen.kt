@@ -4,9 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,8 +18,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zeravrix.zeravrix.core.*
+import com.zeravrix.zeravrix.theme.KotatsuTheme
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 
+enum class SettingsSection(val title: String, val icon: String, val subtitle: String) {
+    APPEARANCE("Appearance", "🎨", "Theme chooser, dark mode, AMOLED"),
+    READER("Reader", "📖", "Reading mode, scale, controls"),
+    SOURCES("Sources", "🌐", "Content filters, languages, pinned"),
+    STORAGE("Storage & Cache", "💾", "Disk usage, image cache cleanup"),
+    ABOUT("About", "ℹ️", "Version, credits, and engine info")
+}
+
+/**
+ * Replicates Kotatsu's layout-w600dp-land/activity_settings.xml
+ * Two-pane Master-Detail landscape settings screen
+ */
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
@@ -30,256 +40,420 @@ fun SettingsScreen(
     onClearCache: () -> Unit,
 ) {
     val tokens = LocalGlassTokens.current
+    var selectedSection by remember { mutableStateOf(SettingsSection.APPEARANCE) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp)
-    ) {
-        // Section: 13 Themes Studio
-        Text(
-            "THEME STUDIO (13 BLUEPRINT THEMES)",
-            color = tokens.primary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.2.sp
-        )
-        Text(
-            "Instant live switching with hardware-accelerated Skia rendering.",
-            color = tokens.textMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 2.dp, bottom = 14.dp)
-        )
+    Row(modifier = Modifier.fillMaxSize()) {
+        // Master Column (Left 340dp)
+        Column(
+            modifier = Modifier
+                .width(340.dp)
+                .fillMaxHeight()
+                .background(tokens.surfaceContainer)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                "SETTINGS",
+                color = tokens.primary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.2.sp
+            )
+            Spacer(Modifier.height(14.dp))
 
-        // 13 Theme Cards Grid
-        val allThemes = ColorTheme.entries
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            allThemes.chunked(3).forEach { rowThemes ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+            SettingsSection.entries.forEach { section ->
+                val isSelected = selectedSection == section
+                Surface(
+                    color = if (isSelected) tokens.primaryContainer else Color.Transparent,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { selectedSection = section }
                 ) {
-                    rowThemes.forEach { theme ->
-                        val isSelected = settings.colorTheme == theme
-                        val themePrimary = Color(theme.primaryHex)
-                        val themeSecondary = Color(theme.secondaryHex)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(section.icon, fontSize = 18.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                section.title,
+                                color = if (isSelected) tokens.primary else tokens.textPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                            Text(
+                                section.subtitle,
+                                color = tokens.textMuted,
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
-                        Surface(
-                            color = if (isSelected) tokens.primary.copy(alpha = 0.18f) else tokens.surfaceCard,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(
-                                    if (isSelected) 2.dp else 1.dp,
-                                    if (isSelected) tokens.borderGlow else tokens.borderGlass,
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .clickable {
-                                    onSettingsChange(settings.copy(colorTheme = theme))
-                                }
-                        ) {
+        // 1dp Divider Line (Kotatsu colorSurfaceDim)
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .fillMaxHeight()
+                .background(tokens.outlineVariant.copy(alpha = 0.5f))
+        )
+
+        // Detail Column (Right Pane)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(28.dp)
+        ) {
+            when (selectedSection) {
+                SettingsSection.APPEARANCE -> {
+                    Text(
+                        "APPEARANCE",
+                        color = tokens.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Kotatsu Material 3 Themes & Dark Mode",
+                        color = tokens.textMuted,
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+
+                    // Kotatsu Theme Chooser
+                    Text(
+                        "THEME PRESET",
+                        color = tokens.textPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    val kotatsuThemes = KotatsuTheme.entries
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        kotatsuThemes.chunked(3).forEach { row ->
                             Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Swatch Circles
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(themePrimary)
-                                        .border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(CircleShape)
-                                        .background(themeSecondary)
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        theme.title,
-                                        color = if (isSelected) tokens.primary else tokens.textPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                    Text(
-                                        theme.description,
-                                        color = tokens.textMuted,
-                                        fontSize = 10.sp,
-                                        maxLines = 1
-                                    )
+                                row.forEach { theme ->
+                                    val isSelected = when (theme) {
+                                        KotatsuTheme.TOTORO -> settings.colorTheme == ColorTheme.INDIGO_NIGHT && !settings.isAmoled
+                                        KotatsuTheme.MIKU -> settings.colorTheme == ColorTheme.OCEAN
+                                        KotatsuTheme.ASUKA -> settings.colorTheme == ColorTheme.CRIMSON
+                                        KotatsuTheme.MION -> settings.colorTheme == ColorTheme.MATCHA
+                                        KotatsuTheme.RIKKA -> settings.colorTheme == ColorTheme.LAVENDER
+                                        KotatsuTheme.SAKURA -> settings.colorTheme == ColorTheme.SAKURA
+                                        KotatsuTheme.MAMIMI -> settings.colorTheme == ColorTheme.INDIGO_NIGHT
+                                        KotatsuTheme.KANADE -> settings.colorTheme == ColorTheme.GRAPHITE
+                                        KotatsuTheme.ITSUKA -> settings.colorTheme == ColorTheme.EMBER
+                                    }
+
+                                    Surface(
+                                        color = if (isSelected) tokens.primaryContainer else tokens.surfaceContainer,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .border(
+                                                if (isSelected) 2.dp else 1.dp,
+                                                if (isSelected) tokens.primary else tokens.outlineVariant.copy(alpha = 0.5f),
+                                                RoundedCornerShape(12.dp)
+                                            )
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable {
+                                                val mappedColor = when (theme) {
+                                                    KotatsuTheme.TOTORO -> ColorTheme.INDIGO_NIGHT
+                                                    KotatsuTheme.MIKU -> ColorTheme.OCEAN
+                                                    KotatsuTheme.ASUKA -> ColorTheme.CRIMSON
+                                                    KotatsuTheme.MION -> ColorTheme.MATCHA
+                                                    KotatsuTheme.RIKKA -> ColorTheme.LAVENDER
+                                                    KotatsuTheme.SAKURA -> ColorTheme.SAKURA
+                                                    KotatsuTheme.MAMIMI -> ColorTheme.INDIGO_NIGHT
+                                                    KotatsuTheme.KANADE -> ColorTheme.GRAPHITE
+                                                    KotatsuTheme.ITSUKA -> ColorTheme.EMBER
+                                                }
+                                                onSettingsChange(settings.copy(colorTheme = mappedColor, isAmoled = false))
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(theme.darkPrimary))
+                                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(theme.darkSecondary))
+                                            )
+                                            Spacer(Modifier.width(10.dp))
+                                            Text(
+                                                theme.title,
+                                                color = tokens.textPrimary,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    // Fill remaining slots in last row if not multiple of 3
-                    if (rowThemes.size < 3) {
-                        repeat(3 - rowThemes.size) {
-                            Spacer(Modifier.weight(1f))
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // Dark Mode & AMOLED Toggles
+                    Surface(
+                        color = tokens.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Dark Theme", color = tokens.textPrimary, fontWeight = FontWeight.SemiBold)
+                                    Text("Use night color palette", color = tokens.textMuted, fontSize = 12.sp)
+                                }
+                                Switch(
+                                    checked = settings.theme == AppTheme.DARK,
+                                    onCheckedChange = { isDark ->
+                                        onSettingsChange(settings.copy(theme = if (isDark) AppTheme.DARK else AppTheme.LIGHT))
+                                    }
+                                )
+                            }
+
+                            Divider(modifier = Modifier.padding(vertical = 12.dp), color = tokens.outlineVariant.copy(alpha = 0.3f))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Pure Black (AMOLED)", color = tokens.textPrimary, fontWeight = FontWeight.SemiBold)
+                                    Text("Deep #000000 background for OLED screens", color = tokens.textMuted, fontSize = 12.sp)
+                                }
+                                Switch(
+                                    checked = settings.isAmoled,
+                                    onCheckedChange = { isAmoled ->
+                                        onSettingsChange(settings.copy(isAmoled = isAmoled))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                SettingsSection.READER -> {
+                    Text(
+                        "READER SETTINGS",
+                        color = tokens.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Configure reading direction, scaling, and controls",
+                        color = tokens.textMuted,
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+
+                    Text("DEFAULT READING MODE", color = tokens.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(10.dp))
+
+                    val modes = listOf(
+                        ReaderModePreference.VERTICAL to "Webtoon (Continuous Vertical)",
+                        ReaderModePreference.SINGLE to "Single Page (Standard Left-to-Right)",
+                        ReaderModePreference.DOUBLE to "Double Page Spread",
+                        ReaderModePreference.AUTO to "Japanese (Right-to-Left)"
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        modes.forEach { (mode, label) ->
+                            val isSelected = settings.readerMode == mode
+                            Surface(
+                                color = if (isSelected) tokens.primaryContainer else tokens.surfaceContainer,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(
+                                        if (isSelected) 2.dp else 1.dp,
+                                        if (isSelected) tokens.primary else tokens.outlineVariant.copy(alpha = 0.4f),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onSettingsChange(settings.copy(readerMode = mode)) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { onSettingsChange(settings.copy(readerMode = mode)) }
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(label, color = tokens.textPrimary, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Text("KEYBOARD SHORTCUTS", color = tokens.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        color = tokens.surfaceContainer,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text("• Arrow Down / Space / Page Down: Scroll down or next page", color = tokens.textMuted, fontSize = 12.sp)
+                            Text("• Arrow Up / Page Up: Scroll up or previous page", color = tokens.textMuted, fontSize = 12.sp)
+                            Text("• Left / Right Arrow: Turn pages in horizontal mode", color = tokens.textMuted, fontSize = 12.sp)
+                            Text("• Esc: Exit reader and return to details", color = tokens.textMuted, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                SettingsSection.SOURCES -> {
+                    Text(
+                        "SOURCES & CONTENT",
+                        color = tokens.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+
+                    Surface(
+                        color = tokens.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Show 18+ (NSFW) Content", color = tokens.textPrimary, fontWeight = FontWeight.SemiBold)
+                                    Text("Include adult / mature manga in catalog and search", color = tokens.textMuted, fontSize = 12.sp)
+                                }
+                                Switch(
+                                    checked = settings.nsfwEnabled,
+                                    onCheckedChange = { nsfw ->
+                                        onSettingsChange(settings.copy(nsfwEnabled = nsfw))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                SettingsSection.STORAGE -> {
+                    Text(
+                        "STORAGE & CACHE",
+                        color = tokens.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+
+                    var cacheCleared by remember { mutableStateOf(false) }
+
+                    Surface(
+                        color = tokens.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Disk Image Cache", color = tokens.textPrimary, fontWeight = FontWeight.SemiBold)
+                            Text("Fast Skia bitmap cache stored in ~/.zeravrix/cache", color = tokens.textMuted, fontSize = 12.sp)
+
+                            Spacer(Modifier.height(14.dp))
+
+                            Button(
+                                onClick = {
+                                    onClearCache()
+                                    cacheCleared = true
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = tokens.primary, contentColor = tokens.onPrimary)
+                            ) {
+                                Text(if (cacheCleared) "✓ Cache Cleared" else "Clear Image Cache", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                SettingsSection.ABOUT -> {
+                    Text(
+                        "ABOUT ZERAVRIX PC",
+                        color = tokens.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(Modifier.height(18.dp))
+
+                    Surface(
+                        color = tokens.surfaceContainer,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text("ZERAVRIX PC", color = tokens.primary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("Version 1.6.0 (Native Desktop Release)", color = tokens.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "Native PC manga and manhwa reader engineered with Kotatsu's parser engine and high-performance Compose Desktop Skia hardware acceleration.",
+                                color = tokens.textMuted,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            Text("• 100+ Live parsers integrated directly from Kotatsu", color = tokens.textMuted, fontSize = 12.sp)
+                            Text("• Zero startup lag & instant page rendering with Skia", color = tokens.textMuted, fontSize = 12.sp)
+                            Text("• 9 Authentic Kotatsu Material 3 landscape color themes", color = tokens.textMuted, fontSize = 12.sp)
                         }
                     }
                 }
             }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        // Section: Appearance Mode & AMOLED
-        Text(
-            "DISPLAY MODE",
-            color = tokens.primary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.2.sp
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ModeSelectButton(
-                title = "Dark Mode",
-                selected = settings.theme == AppTheme.DARK && !settings.isAmoled,
-                onClick = { onSettingsChange(settings.copy(theme = AppTheme.DARK, isAmoled = false)) }
-            )
-            ModeSelectButton(
-                title = "AMOLED Pitch Black",
-                selected = settings.isAmoled,
-                onClick = { onSettingsChange(settings.copy(isAmoled = true)) }
-            )
-            ModeSelectButton(
-                title = "Light Mode",
-                selected = settings.theme == AppTheme.LIGHT && !settings.isAmoled,
-                onClick = { onSettingsChange(settings.copy(theme = AppTheme.LIGHT, isAmoled = false)) }
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        // Section: Reader & Language
-        Text(
-            "READER & LANGUAGE",
-            color = tokens.primary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.2.sp
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ModeSelectButton(
-                title = "Webtoon Vertical Strip (Default)",
-                selected = settings.readerMode == ReaderModePreference.VERTICAL,
-                onClick = { onSettingsChange(settings.copy(readerMode = ReaderModePreference.VERTICAL)) }
-            )
-            ModeSelectButton(
-                title = "Single Page",
-                selected = settings.readerMode == ReaderModePreference.SINGLE,
-                onClick = { onSettingsChange(settings.copy(readerMode = ReaderModePreference.SINGLE)) }
-            )
-            ModeSelectButton(
-                title = "Double Spread",
-                selected = settings.readerMode == ReaderModePreference.DOUBLE,
-                onClick = { onSettingsChange(settings.copy(readerMode = ReaderModePreference.DOUBLE)) }
-            )
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // Language Pills
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ModeSelectButton(
-                title = "English",
-                selected = settings.language == AppLanguage.ENGLISH,
-                onClick = { onSettingsChange(settings.copy(language = AppLanguage.ENGLISH)) }
-            )
-            ModeSelectButton(
-                title = "العربية (Arabic)",
-                selected = settings.language == AppLanguage.ARABIC,
-                onClick = { onSettingsChange(settings.copy(language = AppLanguage.ARABIC)) }
-            )
-            ModeSelectButton(
-                title = "Français (French)",
-                selected = settings.language == AppLanguage.FRENCH,
-                onClick = { onSettingsChange(settings.copy(language = AppLanguage.FRENCH)) }
-            )
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        // Maintenance & Cache
-        Surface(
-            color = tokens.surfaceCard,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, tokens.borderGlass, RoundedCornerShape(12.dp))
-                .padding(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Disk & Memory Cache", color = tokens.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text("Atomic disk cache and memory bounded LRU caches for webtoon chapters.", color = tokens.textMuted, fontSize = 11.sp)
-                }
-                Surface(
-                    color = Color(0xFFDC2626).copy(alpha = 0.2f),
-                    contentColor = Color(0xFFFF6B6B),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onClearCache() }
-                ) {
-                    Text("Clear Cache", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.ModeSelectButton(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val tokens = LocalGlassTokens.current
-
-    Surface(
-        color = if (selected) tokens.primary.copy(alpha = 0.2f) else tokens.surfaceCard,
-        contentColor = if (selected) tokens.primary else tokens.textPrimary,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(10.dp))
-            .border(
-                1.dp,
-                if (selected) tokens.borderGlow else tokens.borderGlass,
-                RoundedCornerShape(10.dp)
-            )
-            .clickable(onClick = onClick)
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(title, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
         }
     }
 }
