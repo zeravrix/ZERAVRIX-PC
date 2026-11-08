@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
+import com.zeravrix.zeravrix.core.AppUpdateInfo
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import org.jetbrains.skia.Image as SkiaImage
 
@@ -46,17 +48,26 @@ fun WindowScope.WindowChrome(
     onClose: () -> Unit,
     readerActive: Boolean = false,
     onReaderToggle: () -> Unit = {},
+    customIconPath: String? = null,
+    updateInfo: AppUpdateInfo? = null,
+    onDownloadUpdate: () -> Unit = {},
 ) {
     val tokens = LocalGlassTokens.current
     val chromeShape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)
 
-    val logoBitmap = remember {
-        runCatching {
-            val bytes = object {}.javaClass.getResourceAsStream("/logo.png")?.readBytes()
-            if (bytes != null && bytes.isNotEmpty()) {
-                SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
+    val logoBitmap = remember(customIconPath) {
+        val bytes = runCatching {
+            if (!customIconPath.isNullOrBlank()) {
+                val f = java.io.File(customIconPath)
+                if (f.exists()) f.readBytes() else null
             } else null
+        }.getOrNull() ?: runCatching {
+            object {}.javaClass.getResourceAsStream("/logo.png")?.readBytes()
         }.getOrNull()
+
+        if (bytes != null && bytes.isNotEmpty()) {
+            runCatching { SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+        } else null
     }
 
     WindowDraggableArea(
@@ -113,6 +124,38 @@ fun WindowScope.WindowChrome(
             }
 
             Spacer(Modifier.weight(1f))
+
+            // Update Available Button (Appears ONLY when a newer version is released on GitHub)
+            if (updateInfo != null) {
+                Surface(
+                    color = Color(0xFF10B981).copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onDownloadUpdate() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = "Update",
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            "Update v${updateInfo.version}",
+                            color = Color(0xFF10B981),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
 
             // Window Controls (Minimize, Maximize, Close)
             ChromeIconButton(

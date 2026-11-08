@@ -84,6 +84,8 @@ fun ExploreScreen(
     onNavigateBookmarks: () -> Unit = {},
     onNavigateDownloads: () -> Unit = {},
     onNavigateLocal: () -> Unit = {},
+    pinnedSourceIds: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
 ) {
     val tokens = LocalGlassTokens.current
     val scope = rememberCoroutineScope()
@@ -129,21 +131,6 @@ fun ExploreScreen(
             }
         }
         list
-    }
-
-    // Pinned sources (stores source ID or parser name)
-    var pinnedSourceIds by remember {
-        mutableStateOf(
-            setOf(
-                "WEBTOONS_EN",
-                "MANGADEX",
-                "TOONILY",
-                "MANGATOWN",
-                "builtin_${0x4D414E4741535741L}", // MangaSwat (Arabic)
-                "builtin_${0x5445414D584CL}",       // Team X (Arabic)
-                "builtin_${0x4D414E47414C454BL}"   // Mangalek (Arabic)
-            )
-        )
     }
 
     // Catalog search & language filter
@@ -338,7 +325,7 @@ fun ExploreScreen(
                                 viewMode = "SOURCE_VIEW"
                             },
                             onUnpin = {
-                                pinnedSourceIds = pinnedSourceIds - item.id
+                                onTogglePin(item.id)
                             }
                         )
                     }
@@ -592,13 +579,7 @@ fun ExploreScreen(
                                 }
 
                                 IconButton(
-                                    onClick = {
-                                        pinnedSourceIds = if (isPinned) {
-                                            pinnedSourceIds - item.id
-                                        } else {
-                                            pinnedSourceIds + item.id
-                                        }
-                                    }
+                                    onClick = { onTogglePin(item.id) }
                                 ) {
                                     Icon(
                                         imageVector = if (isPinned) Icons.Rounded.PushPin else Icons.Rounded.Add,

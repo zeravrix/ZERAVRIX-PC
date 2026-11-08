@@ -96,8 +96,23 @@ private fun setupCrashDiagnostics(appDir: Path) {
     }
 }
 
-private fun loadAppIconPainter(): BitmapPainter {
+private fun openBrowser(url: String) {
+    runCatching {
+        if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
+            java.awt.Desktop.getDesktop().browse(java.net.URI(url))
+        } else {
+            Runtime.getRuntime().exec(arrayOf("cmd", "/c", "start", url))
+        }
+    }
+}
+
+private fun loadAppIconPainter(customIconPath: String? = null): BitmapPainter {
     val bytes = runCatching {
+        if (!customIconPath.isNullOrBlank()) {
+            val f = java.io.File(customIconPath)
+            if (f.exists()) f.readBytes() else null
+        } else null
+    }.getOrNull() ?: runCatching {
         object {}.javaClass.getResourceAsStream("/logo.png")?.readBytes()
     }.getOrNull()
 
@@ -144,7 +159,15 @@ fun main() = application {
     var startupProgress by remember { mutableFloatStateOf(0.2f) }
     var startupStatus by remember { mutableStateOf("Initializing ZERAVRIX engine...") }
 
-    val appIcon = remember { loadAppIconPainter() }
+    // Application Update Info (checked silently from GitHub in background)
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            updateInfo = AppUpdateChecker.checkForUpdate()
+        }
+    }
+
+    val appIcon = remember(settings.customIconPath) { loadAppIconPainter(settings.customIconPath) }
     val windowState = rememberWindowState(
         placement = WindowPlacement.Floating,
         size = DpSize(1280.dp, 820.dp)
@@ -265,7 +288,12 @@ fun main() = application {
                             },
                             onClose = ::exitApplication,
                             readerActive = activeReader != null,
-                            onReaderToggle = { /* focus reader */ }
+                            onReaderToggle = { /* focus reader */ },
+                            customIconPath = settings.customIconPath,
+                            updateInfo = updateInfo,
+                            onDownloadUpdate = {
+                                updateInfo?.downloadUrl?.let { openBrowser(it) }
+                            }
                         )
 
                         // Main Workspace, Split-Pane Details, or Native PC Reader
@@ -354,7 +382,18 @@ fun main() = application {
                                             onOpenManga = { manga -> activeMangaForDetail = manga },
                                             onNavigateBookmarks = { currentScreen = AppNavScreen.FAVOURITES },
                                             onNavigateDownloads = { currentScreen = AppNavScreen.DOWNLOADS },
-                                            onNavigateLocal = { currentScreen = AppNavScreen.HISTORY }
+                                            onNavigateLocal = { currentScreen = AppNavScreen.HISTORY },
+                                            pinnedSourceIds = settings.pinnedSourceIds,
+                                            onTogglePin = { sourceId ->
+                                                val newPinned = if (sourceId in settings.pinnedSourceIds) {
+                                                    settings.pinnedSourceIds - sourceId
+                                                } else {
+                                                    settings.pinnedSourceIds + sourceId
+                                                }
+                                                val updated = settings.copy(pinnedSourceIds = newPinned)
+                                                settings = updated
+                                                settingsStore.save(updated)
+                                            }
                                         )
 
                                         AppNavScreen.FEED -> FeedScreen(
@@ -375,6 +414,15 @@ fun main() = application {
                                             onClearHistory = {
                                                 libraryStore.clearHistory()
                                                 shelfRefresh++
+                                            },
+                                            updateInfo = updateInfo,
+                                            onDownloadUpdate = {
+                                                updateInfo?.downloadUrl?.let { openBrowser(it) }
+                                            },
+                                            onCheckForUpdate = {
+                                                scope.launch(Dispatchers.IO) {
+                                                    updateInfo = AppUpdateChecker.checkForUpdate()
+                                                }
                                             }
                                         )
                                     }

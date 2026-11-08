@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,12 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zeravrix.zeravrix.core.*
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
+import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Desktop
 import java.net.URI
 
@@ -64,6 +68,9 @@ fun SettingsScreen(
     onSettingsChange: (AppSettings) -> Unit,
     onClearCache: () -> Unit,
     onClearHistory: (() -> Unit)? = null,
+    updateInfo: AppUpdateInfo? = null,
+    onDownloadUpdate: () -> Unit = {},
+    onCheckForUpdate: () -> Unit = {},
 ) {
     val tokens = LocalGlassTokens.current
     var selectedSection by remember { mutableStateOf(SettingsSection.APPEARANCE) }
@@ -268,6 +275,114 @@ fun SettingsScreen(
                                     onSettingsChange(settings.copy(animationLevel = if (enabled) AnimationLevel.SMOOTH else AnimationLevel.OFF))
                                 }
                             )
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // Application Icon Personalization
+                    Surface(
+                        color = tokens.surfaceCard,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, tokens.borderGlass, RoundedCornerShape(12.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("APPLICATION ICON", color = tokens.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Personalize the desktop application and window titlebar icon", color = tokens.textMuted, fontSize = 11.sp)
+                            Spacer(Modifier.height(14.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val previewBmp = remember(settings.customIconPath) {
+                                    val bytes = runCatching {
+                                        if (!settings.customIconPath.isNullOrBlank()) {
+                                            val f = java.io.File(settings.customIconPath)
+                                            if (f.exists()) f.readBytes() else null
+                                        } else null
+                                    }.getOrNull() ?: runCatching {
+                                        object {}.javaClass.getResourceAsStream("/logo.png")?.readBytes()
+                                    }.getOrNull()
+
+                                    if (bytes != null && bytes.isNotEmpty()) {
+                                        runCatching { SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+                                    } else null
+                                }
+
+                                if (previewBmp != null) {
+                                    Image(
+                                        bitmap = previewBmp,
+                                        contentDescription = "App Icon",
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .border(1.dp, tokens.borderGlass, RoundedCornerShape(10.dp))
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(tokens.primary.copy(alpha = 0.2f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("ZX", color = tokens.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    }
+                                }
+
+                                Spacer(Modifier.width(16.dp))
+
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilledTonalButton(
+                                            onClick = {
+                                                val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Select Custom Icon (PNG, JPG, ICO)", java.awt.FileDialog.LOAD)
+                                                dialog.setFilenameFilter { _, name ->
+                                                    val l = name.lowercase()
+                                                    l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".ico")
+                                                }
+                                                dialog.isVisible = true
+                                                val dir = dialog.directory
+                                                val file = dialog.file
+                                                if (dir != null && file != null) {
+                                                    val selected = java.io.File(dir, file)
+                                                    if (selected.exists()) {
+                                                        onSettingsChange(settings.copy(customIconPath = selected.absolutePath))
+                                                    }
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(
+                                                containerColor = tokens.primaryContainer,
+                                                contentColor = tokens.primary
+                                            )
+                                        ) {
+                                            Icon(Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Choose Custom Icon", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        if (!settings.customIconPath.isNullOrBlank()) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    onSettingsChange(settings.copy(customIconPath = null))
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, tokens.borderGlass),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = tokens.textMuted)
+                                            ) {
+                                                Icon(Icons.Rounded.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("Reset to Default", fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        if (!settings.customIconPath.isNullOrBlank()) "Custom icon active: ${java.io.File(settings.customIconPath).name}"
+                                        else "Default ZERAVRIX icon active",
+                                        color = tokens.textMuted,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -557,6 +672,63 @@ fun SettingsScreen(
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp
                             )
+
+                            Spacer(Modifier.height(18.dp))
+
+                            // GitHub Release / Update Banner
+                            if (updateInfo != null) {
+                                Surface(
+                                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Rounded.Download, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(24.dp))
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("New Update Available: v${updateInfo.version}", color = Color(0xFF10B981), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                            Text("A newer version of ZERAVRIX is available for download on GitHub.", color = tokens.textMuted, fontSize = 11.sp)
+                                        }
+                                        FilledTonalButton(
+                                            onClick = onDownloadUpdate,
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF10B981), contentColor = Color.Black)
+                                        ) {
+                                            Text("Download Update", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Surface(
+                                    color = tokens.surfaceCard,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, tokens.borderGlass),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = tokens.primary, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("ZERAVRIX is up to date (v1.7.0)", color = tokens.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text("You are using the latest release", color = tokens.textMuted, fontSize = 11.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = onCheckForUpdate,
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(1.dp, tokens.borderGlass)
+                                        ) {
+                                            Text("Check for Updates", fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
 
                             Spacer(Modifier.height(18.dp))
 

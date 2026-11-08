@@ -37,6 +37,16 @@ enum class ColorTheme(
     HIGH_CONTRAST("mono", "High Contrast", 0xFFFFFFFFL, 0xFFE2E8F0L, 0xFF050505L, 0xFFFFFFFFL, "Crisp high-contrast monochrome")
 }
 
+val defaultPinnedSourceIds: Set<String> = setOf(
+    "WEBTOONS_EN",
+    "MANGADEX",
+    "TOONILY",
+    "MANGATOWN",
+    "builtin_5566779435889617217", // MangaSwat (Arabic)
+    "builtin_6072382903332029516", // Team X (Arabic)
+    "builtin_5566779435889395019"  // Mangalek (Arabic)
+)
+
 data class AppSettings(
     val theme: AppTheme = AppTheme.DARK,
     val colorTheme: ColorTheme = ColorTheme.TOTORO,
@@ -56,6 +66,7 @@ data class AppSettings(
     val concurrentDownloads: Int = 2,
     val autoCropMargins: Boolean = false,
     val preferredLanguage: String = "ALL",
+    val pinnedSourceIds: Set<String> = defaultPinnedSourceIds,
 )
 
 class SettingsStore(private val root: Path) {
@@ -92,6 +103,11 @@ class SettingsStore(private val root: Path) {
             concurrentDownloads = properties.getProperty("concurrentDownloads", "2").toIntOrNull()?.coerceIn(1, 4) ?: 2,
             autoCropMargins = properties.getProperty("autoCropMargins", "false").toBoolean(),
             preferredLanguage = properties.getProperty("preferredLanguage", "ALL"),
+            pinnedSourceIds = properties.getProperty("pinnedSourceIds")
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.toSet() ?: defaultPinnedSourceIds,
         )
     }
 
@@ -115,7 +131,12 @@ class SettingsStore(private val root: Path) {
             setProperty("concurrentDownloads", settings.concurrentDownloads.toString())
             setProperty("autoCropMargins", settings.autoCropMargins.toString())
             setProperty("preferredLanguage", settings.preferredLanguage)
-            settings.customIconPath?.takeIf { it.isNotBlank() }?.let { setProperty("customIconPath", it) }
+            setProperty("pinnedSourceIds", settings.pinnedSourceIds.joinToString(","))
+            if (!settings.customIconPath.isNullOrBlank()) {
+                setProperty("customIconPath", settings.customIconPath)
+            } else {
+                remove("customIconPath")
+            }
         }
         Files.newOutputStream(file).use { properties.store(it, "ZERAVRIX desktop settings") }
     }
