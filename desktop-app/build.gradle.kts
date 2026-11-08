@@ -32,10 +32,12 @@ compose.desktop {
         nativeDistributions {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Rpm,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
             )
-            packageName = "ZERAVRIX"
+            packageName = "zeravrix"
             packageVersion = "1.6.0"
-            description = "ZERAVRIX — Native Windows Manga, Manhua & Manhwa Reader"
+            description = "ZERAVRIX — High-Performance Manga, Manhua & Manhwa Reader"
             vendor = "Zeravrix Studio"
             modules(
                 "java.base",
@@ -63,6 +65,13 @@ compose.desktop {
                 shortcut = true
                 dirChooser = true
                 perUserInstall = true
+            }
+            linux {
+                iconFile.set(project.file("src/main/resources/logo.png"))
+                menuGroup = "Graphics"
+                appCategory = "Utility;Graphics;Viewer;"
+                rpmLicenseType = "GPL-3.0"
+                shortcut = true
             }
         }
     }

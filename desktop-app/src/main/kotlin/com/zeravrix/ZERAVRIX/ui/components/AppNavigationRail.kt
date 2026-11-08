@@ -70,15 +70,6 @@ fun AppNavigationRail(
 ) {
     val tokens = LocalGlassTokens.current
 
-    val logoBitmap = remember {
-        runCatching {
-            val bytes = object {}.javaClass.getResourceAsStream("/logo.png")?.readBytes()
-            if (bytes != null && bytes.isNotEmpty()) {
-                SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
-            } else null
-        }.getOrNull()
-    }
-
     Surface(
         modifier = Modifier
             .fillMaxHeight()
@@ -97,43 +88,6 @@ fun AppNavigationRail(
                 .padding(vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Branding Mark
-            Surface(
-                color = tokens.primaryContainer.copy(alpha = 0.45f),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .size(44.dp)
-                    .border(1.dp, tokens.borderGlow.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                    .shadow(elevation = 4.dp, shape = RoundedCornerShape(14.dp), spotColor = tokens.primary)
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(6.dp)) {
-                    if (logoBitmap != null) {
-                        Image(
-                            bitmap = logoBitmap,
-                            contentDescription = "ZERAVRIX",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Text(
-                            "ZX",
-                            color = tokens.primary,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            HorizontalDivider(
-                modifier = Modifier.width(36.dp),
-                thickness = 1.dp,
-                color = tokens.outlineVariant.copy(alpha = 0.3f)
-            )
-
-            Spacer(Modifier.height(14.dp))
-
             // TOP NAVIGATION GROUP: 1. History, 2. Favorites, 3. Explore
             val topScreens = listOf(
                 AppNavScreen.HISTORY,
@@ -198,7 +152,7 @@ private fun NavRailButton(
             hovered -> tokens.surfaceContainerHigh
             else -> Color.Transparent
         },
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     val iconColor by animateColorAsState(
@@ -207,12 +161,12 @@ private fun NavRailButton(
             hovered -> tokens.textPrimary
             else -> tokens.textMuted
         },
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.06f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        targetValue = if (hovered) 1.04f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     Box(

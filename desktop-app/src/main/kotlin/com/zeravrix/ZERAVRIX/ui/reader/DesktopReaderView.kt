@@ -220,33 +220,31 @@ fun DesktopReaderView(
                 }
             }
     ) {
-        // Reader Content Area with Smooth Hardware-Accelerated Zoom
+        // Reader Content Area with Native Width Scaling (Keeps edge gaps, removes bottom gap, crystal-sharp Skia rendering)
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = zoomScale
-                    scaleY = zoomScale
-                },
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             when (mode) {
                 ReaderModePreference.VERTICAL, ReaderModePreference.AUTO -> {
+                    val widthFraction = ((if (fitWidth) 1.0f else 0.85f) * zoomScale.coerceIn(0.30f, 1.0f)).coerceIn(0.20f, 1.0f)
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(widthFraction),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         itemsIndexed(pages, key = { _, page -> "${page.index}_${page.imageUrl}" }) { _, page ->
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(if (fitWidth) 1f else 0.82f)
-                                    .defaultMinSize(minHeight = 400.dp),
+                                    .fillMaxWidth()
+                                    .wrapContentHeight(),
                                 contentAlignment = Alignment.Center
                             ) {
                                 RemoteCoverImage(
                                     url = page.imageUrl,
-                                    contentScale = if (fitWidth) ContentScale.FillWidth else ContentScale.Fit,
+                                    contentScale = ContentScale.FillWidth,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .wrapContentHeight()
@@ -263,7 +261,9 @@ fun DesktopReaderView(
                             RemoteCoverImage(
                                 url = currentPage.imageUrl,
                                 contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxHeight().wrapContentWidth()
+                                modifier = Modifier
+                                    .fillMaxHeight(zoomScale.coerceIn(0.35f, 1.0f))
+                                    .wrapContentWidth()
                             )
                         }
                     }
@@ -277,7 +277,9 @@ fun DesktopReaderView(
                     val page2 = pages.getOrNull(idx2)
 
                     Row(
-                        Modifier.fillMaxSize(),
+                        Modifier
+                            .fillMaxHeight(zoomScale.coerceIn(0.35f, 1.0f))
+                            .fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {

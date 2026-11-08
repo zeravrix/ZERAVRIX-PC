@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=ZERAVRIX
+Comment=ZERAVRIX — High-Performance Manga, Manhua & Manhwa Reader
+Exec=zeravrix %U
+Icon=zeravrix
+Terminal=false
+Type=Application
+Categories=Utility;Graphics;Viewer;
+StartupWMClass=com.zeravrix.zeravrix.MainKt
+MimeType=application/x-cbz;application/x-cbr;

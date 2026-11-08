@@ -517,8 +517,8 @@ private fun FloatingContinueReadingButton(
     val hovered by interaction.collectIsHoveredAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.04f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        targetValue = if (hovered) 1.03f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     Surface(

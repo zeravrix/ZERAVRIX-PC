@@ -73,120 +73,36 @@ fun WindowScope.WindowChrome(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // App Branding & Icon
+            // Refined Minimalist App Branding
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(end = 16.dp)
+                modifier = Modifier.padding(start = 4.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(tokens.primary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    color = tokens.primary.copy(alpha = 0.20f),
+                    shape = RoundedCornerShape(7.dp),
+                    modifier = Modifier.size(24.dp)
                 ) {
-                    if (logoBitmap != null) {
-                        Image(
-                            bitmap = logoBitmap,
-                            contentDescription = "ZERAVRIX Logo",
-                            modifier = Modifier.fillMaxSize().padding(3.dp)
-                        )
-                    } else {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Text(
-                            "ZX",
+                            "Z",
                             color = tokens.primary,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 11.sp
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp
                         )
                     }
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(9.dp))
                 Text(
                     "ZERAVRIX",
                     color = tokens.textPrimary,
                     fontWeight = FontWeight.Black,
                     fontSize = 13.sp,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.4.sp
                 )
             }
 
-            // Quick Search Command Bar
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(30.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(tokens.surfaceCard)
-                    .border(1.dp, tokens.borderGlass, RoundedCornerShape(15.dp))
-                    .clickable(onClick = onSearchClick)
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Search,
-                        contentDescription = "Search",
-                        tint = tokens.primary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (searchQuery.isNotBlank()) searchQuery else "Search manga, manhwa...",
-                        color = if (searchQuery.isNotBlank()) tokens.textPrimary else tokens.textMuted,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(tokens.surfaceContainerHigh)
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            "Ctrl+K",
-                            color = tokens.textMuted,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.width(16.dp))
-
-            // Reader Toggle pill if active
-            if (readerActive) {
-                Surface(
-                    color = tokens.primaryContainer,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .clickable(onClick = onReaderToggle)
-                        .padding(end = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.MenuBook,
-                            contentDescription = "Active Reader",
-                            tint = tokens.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "READER ACTIVE",
-                            color = tokens.primary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
+            Spacer(Modifier.weight(1f))
 
             // Window Controls (Minimize, Maximize, Close)
             ChromeIconButton(
@@ -240,7 +156,7 @@ private fun ChromeIconButton(
             active -> tokens.primary.copy(alpha = 0.20f)
             else -> Color.Transparent
         },
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(80)
     )
 
     val fg by animateColorAsState(
@@ -249,12 +165,12 @@ private fun ChromeIconButton(
             active -> tokens.primary
             else -> tint
         },
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(80)
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else if (hovered) 1.05f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        targetValue = if (pressed) 0.94f else if (hovered) 1.03f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(80)
     )
 
     Surface(

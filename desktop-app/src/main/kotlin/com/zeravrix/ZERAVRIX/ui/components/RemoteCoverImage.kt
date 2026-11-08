@@ -169,24 +169,14 @@ fun RemoteCoverImage(
                 bitmap = imageBitmap!!,
                 contentDescription = contentDescription,
                 contentScale = contentScale,
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 modifier = Modifier.fillMaxSize()
             )
         } else if (isLoading) {
-            // Elegant pulsing skeleton shimmer
-            val transition = rememberInfiniteTransition()
-            val alpha by transition.animateFloat(
-                initialValue = 0.25f,
-                targetValue = 0.65f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(800, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse
-                )
-            )
-
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(tokens.surfaceContainerHigh.copy(alpha = alpha)),
+                    .background(Color(0xFF14161C)),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
@@ -196,11 +186,10 @@ fun RemoteCoverImage(
                 )
             }
         } else {
-            // High-grade fallback placeholder
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(tokens.surfaceContainerHigh),
+                    .background(Color(0xFF14161C)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

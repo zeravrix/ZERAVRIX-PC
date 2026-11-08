@@ -134,7 +134,7 @@ fun ZChip(
             hovered -> tokens.surfaceContainerHigh
             else -> tokens.surfaceCard
         },
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     val borderColor by animateColorAsState(
@@ -143,17 +143,17 @@ fun ZChip(
             hovered -> tokens.borderGlow
             else -> tokens.borderGlass
         },
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     val textColor by animateColorAsState(
         targetValue = if (selected) tokens.primary else if (hovered) tokens.textPrimary else tokens.textMuted,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.03f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+        targetValue = if (hovered) 1.02f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(100)
     )
 
     Surface(
