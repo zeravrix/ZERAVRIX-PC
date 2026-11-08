@@ -67,7 +67,7 @@ ZERAVRIX PC
 
 # 4. Generate Windows Standalone EXE Installer
 .\gradlew.bat :desktop-app:packageExe
-# Output: desktop-app/build/compose/binaries/main/exe/ZERAVRIX-1.6.0.exe
+# Output: desktop-app/build/compose/binaries/main/exe/ZERAVRIX-1.7.0.exe
 ```
 
 ---

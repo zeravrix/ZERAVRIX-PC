@@ -8,6 +8,7 @@ kotlin { jvmToolchain(21) }
 
 dependencies {
     implementation(compose.desktop.currentOs)
+    implementation(compose.desktop.linux_x64)
     implementation(compose.foundation)
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
@@ -36,7 +37,7 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
             )
             packageName = "zeravrix"
-            packageVersion = "1.6.0"
+            packageVersion = "1.7.0"
             description = "ZERAVRIX — High-Performance Manga, Manhua & Manhwa Reader"
             vendor = "Zeravrix Studio"
             modules(

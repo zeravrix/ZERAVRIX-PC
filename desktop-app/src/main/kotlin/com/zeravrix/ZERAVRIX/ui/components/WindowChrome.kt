@@ -73,23 +73,33 @@ fun WindowScope.WindowChrome(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Refined Minimalist App Branding
+            // App Branding with Original Logo
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 4.dp)
             ) {
-                Surface(
-                    color = tokens.primary.copy(alpha = 0.20f),
-                    shape = RoundedCornerShape(7.dp),
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            "Z",
-                            color = tokens.primary,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp
-                        )
+                if (logoBitmap != null) {
+                    Image(
+                        bitmap = logoBitmap,
+                        contentDescription = "ZERAVRIX",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                    )
+                } else {
+                    Surface(
+                        color = tokens.primary.copy(alpha = 0.20f),
+                        shape = RoundedCornerShape(7.dp),
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text(
+                                "Z",
+                                color = tokens.primary,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.width(9.dp))
