@@ -13,7 +13,7 @@ data class AppUpdateInfo(
 )
 
 object AppUpdateChecker {
-    const val CURRENT_VERSION = "1.7.0"
+    const val CURRENT_VERSION = "1.7.1"
     private const val GITHUB_API_URL = "https://api.github.com/repos/zeravrix/ZERAVRIX-PC/releases/latest"
 
     private val client by lazy {

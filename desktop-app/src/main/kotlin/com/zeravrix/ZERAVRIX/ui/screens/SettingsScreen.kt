@@ -716,7 +716,7 @@ fun SettingsScreen(
                                         Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = tokens.primary, modifier = Modifier.size(20.dp))
                                         Spacer(Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text("ZERAVRIX is up to date (v1.7.0)", color = tokens.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text("ZERAVRIX is up to date (v${AppUpdateChecker.CURRENT_VERSION})", color = tokens.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                             Text("You are using the latest release", color = tokens.textMuted, fontSize = 11.sp)
                                         }
                                         OutlinedButton(

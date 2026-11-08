@@ -1,5 +1,5 @@
 Name:           zeravrix
-Version:        1.7.0
+Version:        1.7.1
 Release:        1%{?dist}
 Summary:        ZERAVRIX — High-Performance Manga, Manhua & Manhwa Reader
 License:        GPL-3.0
@@ -30,5 +30,5 @@ install -m 644 logo.png %{buildroot}/usr/share/icons/hicolor/256x256/apps/zeravr
 /usr/share/icons/hicolor/256x256/apps/zeravrix.png
 
 %changelog
-* Sun Nov 08 2026 ZERAVRIX Team <contact@zeravrix.pages.dev> - 1.7.0-1
-- Release 1.7.0 with native Linux OpenGL support and restored branding
+* Sun Nov 08 2026 ZERAVRIX Team <contact@zeravrix.pages.dev> - 1.7.1-1
+- Release 1.7.1 with seamless continuous multi-chapter reader, memory cache optimization, and in-app updater

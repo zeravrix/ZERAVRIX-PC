@@ -37,7 +37,7 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
             )
             packageName = "zeravrix"
-            packageVersion = "1.7.0"
+            packageVersion = "1.7.1"
             description = "ZERAVRIX — High-Performance Manga, Manhua & Manhwa Reader"
             vendor = "Zeravrix Studio"
             modules(
