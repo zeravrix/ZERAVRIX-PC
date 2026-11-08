@@ -43,10 +43,10 @@ enum class AppNavScreen(
     val icon: ImageVector,
     val title: String,
 ) {
-    HISTORY("history", Icons.Rounded.History, "History"),
-    FAVOURITES("favourites", Icons.Rounded.Favorite, "Favourites"),
-    DOWNLOADS("downloads", Icons.Rounded.Download, "Downloads"),
     EXPLORE("explore", Icons.Rounded.Explore, "Explore"),
+    FAVOURITES("favourites", Icons.Rounded.Favorite, "Favourites"),
+    HISTORY("history", Icons.Rounded.History, "History"),
+    DOWNLOADS("downloads", Icons.Rounded.Download, "Downloads"),
     FEED("feed", Icons.Rounded.DynamicFeed, "Feed"),
     SETTINGS("settings", Icons.Rounded.Settings, "Settings");
 
@@ -84,7 +84,7 @@ fun AppNavigationRail(
     Surface(
         modifier = Modifier
             .fillMaxHeight()
-            .width(88.dp)
+            .width(80.dp)
             .border(
                 width = 1.dp,
                 color = tokens.borderGlass,
@@ -104,9 +104,9 @@ fun AppNavigationRail(
                 color = tokens.primaryContainer.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(44.dp)
                     .border(1.dp, tokens.borderGlow.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                    .shadow(elevation = 6.dp, shape = RoundedCornerShape(14.dp), spotColor = tokens.primary)
+                    .shadow(elevation = 4.dp, shape = RoundedCornerShape(14.dp), spotColor = tokens.primary)
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(6.dp)) {
                     if (logoBitmap != null) {
@@ -126,7 +126,47 @@ fun AppNavigationRail(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
+
+            // Settings button explicitly placed at TOP above other buttons as requested
+            val isSettingsSelected = currentScreen == AppNavScreen.SETTINGS
+            val settingsInteraction = remember { MutableInteractionSource() }
+            val settingsHovered by settingsInteraction.collectIsHoveredAsState()
+
+            Surface(
+                color = when {
+                    isSettingsSelected -> tokens.primaryContainer
+                    settingsHovered -> tokens.surfaceContainerHigh
+                    else -> tokens.surfaceContainer.copy(alpha = 0.6f)
+                },
+                contentColor = if (isSettingsSelected) tokens.primary else tokens.textPrimary,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .size(46.dp)
+                    .hoverable(settingsInteraction)
+                    .clickable(interactionSource = settingsInteraction, indication = null) {
+                        onScreenSelect(AppNavScreen.SETTINGS)
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Rounded.Settings,
+                        contentDescription = "Settings",
+                        tint = if (isSettingsSelected) tokens.primary else if (settingsHovered) tokens.textPrimary else tokens.textMuted,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            HorizontalDivider(
+                modifier = Modifier.width(40.dp),
+                thickness = 1.dp,
+                color = tokens.outlineVariant.copy(alpha = 0.35f)
+            )
+
+            Spacer(Modifier.height(12.dp))
 
             // Kotatsu Navigation Rail FAB (Resume Reading)
             if (hasResumeTarget && onResumeReading != null) {
@@ -135,27 +175,35 @@ fun AppNavigationRail(
                     containerColor = tokens.primary,
                     contentColor = tokens.onPrimary,
                     shape = RoundedCornerShape(16.dp),
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
-                    modifier = Modifier.size(50.dp)
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp, pressedElevation = 8.dp),
+                    modifier = Modifier.size(46.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.PlayArrow,
                         contentDescription = "Resume Reading",
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
-            // Navigation Destination Items
+            // Main Content Navigation Items (Exclude SETTINGS since it is placed at TOP above other buttons)
+            val contentScreens = listOf(
+                AppNavScreen.EXPLORE,
+                AppNavScreen.FAVOURITES,
+                AppNavScreen.HISTORY,
+                AppNavScreen.DOWNLOADS,
+                AppNavScreen.FEED
+            )
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AppNavScreen.entries.forEach { screen ->
+                contentScreens.forEach { screen ->
                     val selected = currentScreen == screen
                     val badge = if (screen == AppNavScreen.FEED && feedBadgeCount > 0) feedBadgeCount.toString() else null
 
@@ -167,16 +215,6 @@ fun AppNavigationRail(
                     )
                 }
             }
-
-            // Bottom Brand Text
-            Text(
-                "ZERAVRIX",
-                color = tokens.textMuted.copy(alpha = 0.6f),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.5.sp,
-                modifier = Modifier.padding(top = 8.dp)
-            )
         }
     }
 }
@@ -191,12 +229,6 @@ private fun KotatsuNavRailItem(
     val tokens = LocalGlassTokens.current
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-
-    // Smooth hover / active animations
-    val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 56.dp else if (hovered) 48.dp else 0.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-    )
 
     val containerColor by animateColorAsState(
         targetValue = when {
@@ -217,60 +249,41 @@ private fun KotatsuNavRailItem(
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.05f else 1f,
+        targetValue = if (hovered) 1.08f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
     )
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp, horizontal = 6.dp)
+            .size(52.dp, 40.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(containerColor)
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
     ) {
-        // M3 Indicator Pill
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .width(56.dp)
-                .height(32.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(containerColor)
-        ) {
-            Icon(
-                imageVector = screen.icon,
-                contentDescription = screen.title,
-                tint = iconColor,
-                modifier = Modifier.size(20.dp)
-            )
+        Icon(
+            imageVector = screen.icon,
+            contentDescription = screen.title,
+            tint = iconColor,
+            modifier = Modifier.size(22.dp)
+        )
 
-            if (badge != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 2.dp, end = 4.dp)
-                        .clip(CircleShape)
-                        .background(tokens.primary)
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                ) {
-                    Text(badge, color = tokens.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                }
+        if (badge != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 4.dp, end = 6.dp)
+                    .clip(CircleShape)
+                    .background(tokens.primary)
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text(badge, color = tokens.onPrimary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
         }
-
-        Spacer(Modifier.height(3.dp))
-
-        Text(
-            text = screen.title,
-            color = iconColor,
-            fontSize = 11.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
     }
 }

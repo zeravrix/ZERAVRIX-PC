@@ -7,6 +7,7 @@ import com.zeravrix.zeravrix.source.MangaPageResult
 import com.zeravrix.zeravrix.source.SourceCapabilities
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.MangaListFilter
 import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.model.SortOrder
@@ -40,7 +41,43 @@ class KotatsuSourceAdapter(
         filters = false
     )
 
-    private val cachedMangaMap = ConcurrentHashMap<String, org.koitharu.kotatsu.parsers.model.Manga>()
+    companion object {
+        // Shared global cache so manga metadata and chapters are never lost across screen transitions
+        val globalMangaCache = ConcurrentHashMap<String, org.koitharu.kotatsu.parsers.model.Manga>()
+        val globalChapterCache = ConcurrentHashMap<String, org.koitharu.kotatsu.parsers.model.MangaChapter>()
+    }
+
+    private fun normalizeUrl(url: String): String {
+        return if (url.startsWith("//")) {
+            "https://$domain/${url.trimStart('/')}"
+        } else url
+    }
+
+    private fun getSafeManga(manga: Manga): org.koitharu.kotatsu.parsers.model.Manga {
+        val cached = globalMangaCache[manga.id]
+        if (cached != null) {
+            val normUrl = normalizeUrl(cached.url)
+            return if (cached.url != normUrl) cached.copy(url = normUrl) else cached
+        }
+        val targetUrl = normalizeUrl(manga.url ?: manga.id)
+        return org.koitharu.kotatsu.parsers.model.Manga(
+            id = manga.id.toLongOrNull() ?: 0L,
+            title = manga.title,
+            altTitles = emptySet(),
+            url = targetUrl,
+            publicUrl = targetUrl,
+            rating = 0f,
+            contentRating = ContentRating.SAFE,
+            coverUrl = manga.coverUrl.orEmpty(),
+            tags = emptySet(),
+            state = null,
+            authors = emptySet(),
+            largeCoverUrl = null,
+            description = manga.description,
+            chapters = null,
+            source = parserSource
+        )
+    }
 
     suspend fun fetchList(
         page: Int = 1,
@@ -49,11 +86,14 @@ class KotatsuSourceAdapter(
     ): MangaPageResult = withContext(Dispatchers.IO) {
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
+            val effectiveOrder = if (order in parser.availableSortOrders) order else parser.availableSortOrders.firstOrNull() ?: SortOrder.POPULARITY
             val filter = if (!query.isNullOrBlank()) MangaListFilter(query = query) else MangaListFilter()
-            val list = parser.getList(offset = (page - 1) * 20, order = order, filter = filter)
+            val list = parser.getList(offset = (page - 1) * 20, order = effectiveOrder, filter = filter)
             val items = list.map { m ->
-                cachedMangaMap[m.id.toString()] = m
-                m.toCoreManga(id)
+                val normUrl = normalizeUrl(m.url)
+                val safeM = if (m.url != normUrl) m.copy(url = normUrl) else m
+                globalMangaCache[safeM.id.toString()] = safeM
+                safeM.toCoreManga(id)
             }
             MangaPageResult(items = items, hasNextPage = items.size >= 20)
         }.getOrElse { MangaPageResult(emptyList(), false) }
@@ -64,10 +104,13 @@ class KotatsuSourceAdapter(
     override suspend fun latest(page: Int): MangaPageResult = withContext(Dispatchers.IO) {
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
-            val list = parser.getList(offset = (page - 1) * 20, order = SortOrder.UPDATED, filter = MangaListFilter())
+            val order = if (SortOrder.UPDATED in parser.availableSortOrders) SortOrder.UPDATED else parser.availableSortOrders.firstOrNull() ?: SortOrder.POPULARITY
+            val list = parser.getList(offset = (page - 1) * 20, order = order, filter = MangaListFilter())
             val items = list.map { m ->
-                cachedMangaMap[m.id.toString()] = m
-                m.toCoreManga(id)
+                val normUrl = normalizeUrl(m.url)
+                val safeM = if (m.url != normUrl) m.copy(url = normUrl) else m
+                globalMangaCache[safeM.id.toString()] = safeM
+                safeM.toCoreManga(id)
             }
             MangaPageResult(items = items, hasNextPage = items.size >= 20)
         }.getOrElse { MangaPageResult(emptyList(), false) }
@@ -77,10 +120,13 @@ class KotatsuSourceAdapter(
         if (query.isBlank()) return@withContext MangaPageResult(emptyList(), false)
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
-            val list = parser.getList(offset = (page - 1) * 20, order = SortOrder.RELEVANCE, filter = MangaListFilter(query = query))
+            val order = if (SortOrder.RELEVANCE in parser.availableSortOrders) SortOrder.RELEVANCE else parser.availableSortOrders.firstOrNull() ?: SortOrder.POPULARITY
+            val list = parser.getList(offset = (page - 1) * 20, order = order, filter = MangaListFilter(query = query))
             val items = list.map { m ->
-                cachedMangaMap[m.id.toString()] = m
-                m.toCoreManga(id)
+                val normUrl = normalizeUrl(m.url)
+                val safeM = if (m.url != normUrl) m.copy(url = normUrl) else m
+                globalMangaCache[safeM.id.toString()] = safeM
+                safeM.toCoreManga(id)
             }
             MangaPageResult(items = items, hasNextPage = items.size >= 20)
         }.getOrElse { MangaPageResult(emptyList(), false) }
@@ -89,12 +135,12 @@ class KotatsuSourceAdapter(
     override suspend fun details(manga: Manga): Manga = withContext(Dispatchers.IO) {
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
-            val kotatsuManga = cachedMangaMap[manga.id]
-                ?: parser.getList(offset = 0, order = SortOrder.RELEVANCE, filter = MangaListFilter(query = manga.title)).firstOrNull()
-                ?: return@withContext manga
-
-            val detailed = parser.getDetails(kotatsuManga)
-            cachedMangaMap[detailed.id.toString()] = detailed
+            val targetManga = getSafeManga(manga)
+            val detailed = parser.getDetails(targetManga)
+            globalMangaCache[detailed.id.toString()] = detailed
+            detailed.chapters?.forEach { ch ->
+                globalChapterCache[ch.id.toString()] = ch
+            }
             detailed.toCoreManga(id)
         }.getOrDefault(manga)
     }
@@ -102,12 +148,12 @@ class KotatsuSourceAdapter(
     override suspend fun chapters(manga: Manga): List<Chapter> = withContext(Dispatchers.IO) {
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
-            val kotatsuManga = cachedMangaMap[manga.id]
-                ?: parser.getList(offset = 0, order = SortOrder.RELEVANCE, filter = MangaListFilter(query = manga.title)).firstOrNull()
-                ?: return@withContext emptyList()
-
-            val detailed = parser.getDetails(kotatsuManga)
-            cachedMangaMap[detailed.id.toString()] = detailed
+            val targetManga = getSafeManga(manga)
+            val detailed = parser.getDetails(targetManga)
+            globalMangaCache[detailed.id.toString()] = detailed
+            detailed.chapters?.forEach { ch ->
+                globalChapterCache[ch.id.toString()] = ch
+            }
             detailed.chapters.orEmpty().map { it.toCoreChapter(manga.id, id) }
         }.getOrDefault(emptyList())
     }
@@ -115,9 +161,18 @@ class KotatsuSourceAdapter(
     override suspend fun pages(chapter: Chapter): List<MangaPage> = withContext(Dispatchers.IO) {
         runCatching {
             val parser = loaderContext.newParserInstance(parserSource)
-            val parentManga = cachedMangaMap[chapter.mangaId] ?: return@withContext emptyList()
-            val kotatsuChapter = parentManga.chapters?.firstOrNull { it.id.toString() == chapter.id }
-                ?: return@withContext emptyList()
+            val kotatsuChapter = globalChapterCache[chapter.id]
+                ?: org.koitharu.kotatsu.parsers.model.MangaChapter(
+                    id = chapter.id.toLongOrNull() ?: 0L,
+                    title = chapter.title,
+                    number = chapter.number ?: 1f,
+                    volume = chapter.volume ?: 0,
+                    url = normalizeUrl(chapter.url ?: chapter.id),
+                    scanlator = chapter.scanlator,
+                    uploadDate = chapter.uploadDate ?: 0L,
+                    branch = null,
+                    source = parserSource
+                )
 
             val pagesList = parser.getPages(kotatsuChapter)
             pagesList.mapIndexed { idx, p ->
@@ -139,17 +194,23 @@ class KotatsuSourceAdapter(
         return target.replace('-', ' ').replace('_', ' ')
             .split(' ')
             .filter { it.isNotBlank() }
-            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+            .joinToString(" ") { word ->
+                word.lowercase().replaceFirstChar { it.uppercase() }
+            }
     }
 
     private fun org.koitharu.kotatsu.parsers.model.Manga.toCoreManga(sourceId: Long): Manga {
-        val parsedTitle = this.title.takeIf { it.isNotBlank() }
-            ?: this.altTitles.firstOrNull()?.takeIf { it.isNotBlank() }
-            ?: cleanSlugToTitle(this.url, this.coverUrl)
+        val parsedTitle = if (this.title.isNotBlank()) {
+            this.title
+        } else {
+            cleanSlugToTitle(this.url, this.coverUrl)
+        }
 
         val baseTags = this.tags?.map { it.title }.orEmpty()
         val isManhwaSource = parserSource == MangaParserSource.ASURASCANS ||
             parserSource == MangaParserSource.FLAMECOMICS ||
+            parserSource == MangaParserSource.WEBTOONS_EN ||
+            parserSource == MangaParserSource.TOONILY ||
             parserSource.name.contains("MANHWA", ignoreCase = true) ||
             parserSource.name.contains("TOON", ignoreCase = true)
 
@@ -170,7 +231,8 @@ class KotatsuSourceAdapter(
             artist = null,
             description = this.description ?: "",
             genres = enrichedGenres,
-            status = this.state?.name
+            status = this.state?.name,
+            url = this.url
         )
     }
 
@@ -181,8 +243,10 @@ class KotatsuSourceAdapter(
             sourceId = sourceId,
             title = this.title ?: "Chapter ${this.number}",
             number = this.number,
+            volume = this.volume,
             uploadDate = this.uploadDate,
-            scanlator = this.scanlator
+            scanlator = this.scanlator,
+            url = this.url
         )
     }
 }

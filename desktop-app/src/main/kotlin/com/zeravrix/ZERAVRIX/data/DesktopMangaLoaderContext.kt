@@ -101,6 +101,17 @@ class DesktopMangaLoaderContext(
         .cache(Cache(cacheDir, 512L * 1024L * 1024L))
         .connectTimeout(25, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val builder = original.newBuilder()
+            if (original.header("User-Agent").isNullOrBlank()) {
+                builder.header("User-Agent", UserAgents.FIREFOX_DESKTOP)
+            }
+            if (original.header("Accept").isNullOrBlank()) {
+                builder.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            }
+            chain.proceed(builder.build())
+        }
         .build()
 
     override val cookieJar: CookieJar get() = desktopCookieJar

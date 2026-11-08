@@ -31,12 +31,13 @@ class LiveSourceRegistry(
 
         if (loaderContext != null) {
             val kotatsuCurated = listOf(
-                MangaParserSource.MANGADEX,
-                MangaParserSource.MANGAKAKALOT,
-                MangaParserSource.ASURASCANS,
-                MangaParserSource.FLAMECOMICS,
-                MangaParserSource.MANGASEE,
                 MangaParserSource.WEBTOONS_EN,
+                MangaParserSource.MANGADEX,
+                MangaParserSource.TOONILY,
+                MangaParserSource.MANGATOWN,
+                MangaParserSource.ASURASCANS,
+                MangaParserSource.MANGAKAKALOT,
+                MangaParserSource.MANGASEE,
                 MangaParserSource.BATOTO,
                 MangaParserSource.COMICK_FUN
             ).filter { !it.isBroken }
@@ -174,12 +175,12 @@ class LiveSourceRegistry(
     }
 
     suspend fun fetchChapters(manga: Manga): List<Chapter> = withContext(Dispatchers.IO) {
-        val source = sourceMap[manga.sourceId] ?: return@withContext emptyList()
+        val source = get(manga.sourceId) ?: return@withContext emptyList()
         runCatching { source.chapters(manga) }.getOrDefault(emptyList())
     }
 
     suspend fun fetchPages(chapter: Chapter): List<MangaPage> = withContext(Dispatchers.IO) {
-        val source = sourceMap[chapter.sourceId] ?: return@withContext emptyList()
+        val source = get(chapter.sourceId) ?: return@withContext emptyList()
         runCatching { source.pages(chapter) }.getOrDefault(emptyList())
     }
 }

@@ -40,6 +40,7 @@ class LibraryStore(private val root: Path) {
             setProperty("genres", manga.genres.joinToString("|"))
             setProperty("status", manga.status.orEmpty())
             manga.cachedChapterCount?.let { setProperty("cachedChapterCount", it.toString()) }
+            manga.url?.let { setProperty("url", it) }
             setProperty("lastAccessed", System.currentTimeMillis().toString())
         }
         Files.newOutputStream(historyFile(manga.id)).use { p.store(it, "ZERAVRIX reading history") }
@@ -79,6 +80,7 @@ class LibraryStore(private val root: Path) {
             setProperty("genres", manga.genres.joinToString("|"))
             setProperty("status", manga.status.orEmpty())
             manga.cachedChapterCount?.let { setProperty("cachedChapterCount", it.toString()) }
+            manga.url?.let { setProperty("url", it) }
         }
         Files.newOutputStream(mangaFile(manga.id)).use { p.store(it, "ZERAVRIX library") }
     }
@@ -232,6 +234,7 @@ class LibraryStore(private val root: Path) {
             genres = p.getProperty("genres", "").split('|').filter { it.isNotBlank() },
             status = p.getProperty("status").takeUnless { it.isNullOrBlank() },
             cachedChapterCount = p.getProperty("cachedChapterCount")?.toIntOrNull(),
+            url = p.getProperty("url").takeUnless { it.isNullOrBlank() },
         )
     }
 

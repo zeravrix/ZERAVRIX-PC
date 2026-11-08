@@ -74,6 +74,7 @@ fun DetailsScreen(
 ) {
     val tokens = LocalGlassTokens.current
     val scope = rememberCoroutineScope()
+    var currentManga by remember(manga.id) { mutableStateOf(manga) }
     var chapters by remember(manga.id) { mutableStateOf(emptyList<Chapter>()) }
     var loading by remember(manga.id) { mutableStateOf(true) }
     var inLibrary by remember(manga.id) { mutableStateOf(false) }
@@ -99,6 +100,13 @@ fun DetailsScreen(
             progress = lastProgress
             if (cached.isNotEmpty()) chapters = oldestFirst(cached)
             downloadedChapterIds = downloader.downloadedChapters(manga.id).map { it.chapterId }.toSet()
+        }
+        val fullDetails = withContext(Dispatchers.IO) {
+            runCatching { sourceRegistry.get(manga.sourceId)?.details(manga) }.getOrNull()
+        }
+        if (fullDetails != null) {
+            currentManga = fullDetails
+            withContext(Dispatchers.IO) { libraryStore.recordHistory(fullDetails) }
         }
         val fresh = sourceRegistry.fetchChapters(manga)
         if (fresh.isNotEmpty()) {
@@ -193,14 +201,14 @@ fun DetailsScreen(
                         color = tokens.surfaceContainerHigh,
                         shadowElevation = 8.dp
                     ) {
-                        RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
+                        RemoteCoverImage(url = currentManga.coverUrl, modifier = Modifier.fillMaxSize())
                     }
 
                     Spacer(Modifier.width(16.dp))
 
                     Column(Modifier.weight(0.64f)) {
                         Text(
-                            text = manga.title,
+                            text = currentManga.title,
                             color = tokens.textPrimary,
                             fontSize = 22.sp,
                             lineHeight = 28.sp,
@@ -208,7 +216,7 @@ fun DetailsScreen(
                             maxLines = 4,
                             overflow = TextOverflow.Ellipsis
                         )
-                        val subtitle = manga.author ?: manga.genres.firstOrNull()
+                        val subtitle = currentManga.author ?: currentManga.genres.firstOrNull()
                         if (subtitle != null) {
                             Spacer(Modifier.height(6.dp))
                             Text(
@@ -225,7 +233,7 @@ fun DetailsScreen(
                             icon = if (inLibrary) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             selected = inLibrary,
                             onClick = {
-                                if (inLibrary) libraryStore.remove(manga.id) else libraryStore.add(manga)
+                                if (inLibrary) libraryStore.remove(currentManga.id) else libraryStore.add(currentManga)
                                 inLibrary = !inLibrary
                             },
                         )
@@ -235,9 +243,9 @@ fun DetailsScreen(
                 Spacer(Modifier.height(18.dp))
 
                 InfoCard {
-                    InfoRow("Source", sourceRegistry.get(manga.sourceId)?.name ?: "—")
-                    manga.author?.let { InfoRow("Author", it) }
-                    InfoRow("Status", manga.status ?: "Ongoing")
+                    InfoRow("Source", sourceRegistry.get(currentManga.sourceId)?.name ?: "—")
+                    currentManga.author?.let { InfoRow("Author", it) }
+                    InfoRow("Status", currentManga.status ?: "Ongoing")
                     InfoRow(
                         "Chapters",
                         when {
@@ -271,7 +279,7 @@ fun DetailsScreen(
                 Spacer(Modifier.height(6.dp))
 
                 Text(
-                    text = manga.description.ifBlank { "No synopsis available for this title." },
+                    text = currentManga.description.ifBlank { "No synopsis available for this title." },
                     color = tokens.textMuted,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
@@ -279,10 +287,10 @@ fun DetailsScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                if (manga.genres.isNotEmpty()) {
+                if (currentManga.genres.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = manga.genres.joinToString("  •  "),
+                        text = currentManga.genres.joinToString("  •  "),
                         color = tokens.primary.copy(alpha = 0.8f),
                         fontSize = 12.sp,
                         lineHeight = 18.sp

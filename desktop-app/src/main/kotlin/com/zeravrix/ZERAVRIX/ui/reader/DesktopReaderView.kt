@@ -19,14 +19,19 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +54,7 @@ enum class ReaderBgColor(val label: String, val color: Color, val textColor: Col
     LIGHT("Light", Color(0xFFF8F9FA), Color(0xFF1A1A1A))
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DesktopReaderView(
     mangaTitle: String,
@@ -72,6 +78,7 @@ fun DesktopReaderView(
     var readerBg by remember { mutableStateOf(if (tokens.isAmoled) ReaderBgColor.AMOLED else ReaderBgColor.DARK) }
     var readingDirection by remember { mutableStateOf(ReaderDirection.LEFT_TO_RIGHT) }
     var fitWidth by remember { mutableStateOf(true) }
+    var zoomScale by remember { mutableFloatStateOf(1.0f) }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -174,9 +181,33 @@ fun DesktopReaderView(
                             }
                             true
                         }
+                        Key.Plus, Key.Equals, Key.NumPadAdd -> {
+                            zoomScale = (zoomScale + 0.15f).coerceAtMost(3.0f)
+                            true
+                        }
+                        Key.Minus, Key.NumPadSubtract -> {
+                            zoomScale = (zoomScale - 0.15f).coerceAtLeast(0.4f)
+                            true
+                        }
+                        Key.Zero, Key.NumPad0 -> {
+                            zoomScale = 1.0f
+                            true
+                        }
                         else -> false
                     }
                 } else false
+            }
+            .onPointerEvent(PointerEventType.Scroll) { event ->
+                val change = event.changes.firstOrNull() ?: return@onPointerEvent
+                if (event.keyboardModifiers.isCtrlPressed) {
+                    val delta = change.scrollDelta.y
+                    if (delta < 0) {
+                        zoomScale = (zoomScale + 0.10f).coerceAtMost(3.0f)
+                    } else if (delta > 0) {
+                        zoomScale = (zoomScale - 0.10f).coerceAtLeast(0.4f)
+                    }
+                    change.consume()
+                }
             }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -189,71 +220,81 @@ fun DesktopReaderView(
                 }
             }
     ) {
-        // Reader Content Area
-        when (mode) {
-            ReaderModePreference.VERTICAL, ReaderModePreference.AUTO -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    itemsIndexed(pages, key = { _, page -> "${page.index}_${page.imageUrl}" }) { _, page ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(if (fitWidth) 1f else 0.82f)
-                                .defaultMinSize(minHeight = 400.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            RemoteCoverImage(
-                                url = page.imageUrl,
-                                contentScale = if (fitWidth) ContentScale.FillWidth else ContentScale.Fit,
+        // Reader Content Area with Smooth Hardware-Accelerated Zoom
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            when (mode) {
+                ReaderModePreference.VERTICAL, ReaderModePreference.AUTO -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        itemsIndexed(pages, key = { _, page -> "${page.index}_${page.imageUrl}" }) { _, page ->
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight()
+                                    .fillMaxWidth(if (fitWidth) 1f else 0.82f)
+                                    .defaultMinSize(minHeight = 400.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                RemoteCoverImage(
+                                    url = page.imageUrl,
+                                    contentScale = if (fitWidth) ContentScale.FillWidth else ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .wrapContentHeight()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                ReaderModePreference.SINGLE -> {
+                    val currentPage = pages.getOrNull(singlePageIndex)
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (currentPage != null) {
+                            RemoteCoverImage(
+                                url = currentPage.imageUrl,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxHeight().wrapContentWidth()
                             )
                         }
                     }
                 }
-            }
 
-            ReaderModePreference.SINGLE -> {
-                val currentPage = pages.getOrNull(singlePageIndex)
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (currentPage != null) {
-                        RemoteCoverImage(
-                            url = currentPage.imageUrl,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxHeight().wrapContentWidth()
-                        )
-                    }
-                }
-            }
+                ReaderModePreference.DOUBLE -> {
+                    val idx1 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex else singlePageIndex + 1
+                    val idx2 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex + 1 else singlePageIndex
 
-            ReaderModePreference.DOUBLE -> {
-                val idx1 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex else singlePageIndex + 1
-                val idx2 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex + 1 else singlePageIndex
+                    val page1 = pages.getOrNull(idx1)
+                    val page2 = pages.getOrNull(idx2)
 
-                val page1 = pages.getOrNull(idx1)
-                val page2 = pages.getOrNull(idx2)
-
-                Row(
-                    Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (page1 != null) {
-                        RemoteCoverImage(
-                            url = page1.imageUrl,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.weight(1f).fillMaxHeight()
-                        )
-                    }
-                    if (page2 != null) {
-                        RemoteCoverImage(
-                            url = page2.imageUrl,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.weight(1f).fillMaxHeight()
-                        )
+                    Row(
+                        Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (page1 != null) {
+                            RemoteCoverImage(
+                                url = page1.imageUrl,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                        if (page2 != null) {
+                            RemoteCoverImage(
+                                url = page2.imageUrl,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
                     }
                 }
             }
@@ -328,6 +369,38 @@ fun DesktopReaderView(
                             selected = mode == ReaderModePreference.DOUBLE,
                             onClick = { mode = ReaderModePreference.DOUBLE }
                         )
+                    }
+
+                    Spacer(Modifier.width(10.dp))
+
+                    // Zoom Controls Pill
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(tokens.surfaceContainer, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        IconButton(
+                            onClick = { zoomScale = (zoomScale - 0.15f).coerceAtLeast(0.4f) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Rounded.Remove, contentDescription = "Zoom Out", modifier = Modifier.size(16.dp), tint = tokens.textPrimary)
+                        }
+                        Text(
+                            text = "${(zoomScale * 100).toInt()}%",
+                            color = tokens.textPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable { zoomScale = 1.0f }
+                                .padding(horizontal = 4.dp)
+                        )
+                        IconButton(
+                            onClick = { zoomScale = (zoomScale + 0.15f).coerceAtMost(3.0f) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = "Zoom In", modifier = Modifier.size(16.dp), tint = tokens.textPrimary)
+                        }
                     }
 
                     Spacer(Modifier.width(10.dp))

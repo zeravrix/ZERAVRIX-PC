@@ -11,6 +11,7 @@ data class Manga(
     val genres: List<String> = emptyList(),
     val status: String? = null,
     val cachedChapterCount: Int? = null,
+    val url: String? = null,
 )
 
 data class Chapter(
@@ -22,6 +23,7 @@ data class Chapter(
     val volume: Int? = null,
     val scanlator: String? = null,
     val uploadDate: Long? = null,
+    val url: String? = null,
 )
 
 data class MangaPage(

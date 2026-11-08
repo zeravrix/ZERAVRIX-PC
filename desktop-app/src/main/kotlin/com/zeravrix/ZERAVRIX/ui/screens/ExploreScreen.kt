@@ -89,14 +89,12 @@ fun ExploreScreen(
     var pinnedParserNames by remember {
         mutableStateOf(
             setOf(
-                "MANGADEX",
-                "MANGAKAKALOT",
-                "ASURASCANS",
-                "FLAMECOMICS",
-                "MANGASEE",
-                "BATOTO",
                 "WEBTOONS_EN",
-                "COMICK_FUN"
+                "MANGADEX",
+                "TOONILY",
+                "MANGATOWN",
+                "ASURASCANS",
+                "MANGAKAKALOT"
             )
         )
     }
@@ -187,55 +185,41 @@ fun ExploreScreen(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 )
 
-                // 2x2 Action Cards Grid (Professional layout)
-                Column(
+                // Streamlined Action Pills (Clean, minimal, intuitive)
+                Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ModernExploreActionButton(
-                            title = "Local Storage",
-                            subtitle = "Browse CBZ & offline archives",
-                            icon = Icons.Rounded.Folder,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateLocal
-                        )
-                        ModernExploreActionButton(
-                            title = "Bookmarks",
-                            subtitle = "Saved favorite titles",
-                            icon = Icons.Rounded.Bookmark,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateBookmarks
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ModernExploreActionButton(
-                            title = "Random Pick",
-                            subtitle = "Discover unexpected gems",
-                            icon = Icons.Rounded.Casino,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                scope.launch {
-                                    val popular = sourceRegistry.fetchPopular()
-                                    val random = popular.randomOrNull()
-                                    if (random != null) onOpenManga(random)
-                                }
+                    ModernExploreActionButton(
+                        title = "Local",
+                        icon = Icons.Rounded.Folder,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateLocal
+                    )
+                    ModernExploreActionButton(
+                        title = "Bookmarks",
+                        icon = Icons.Rounded.Bookmark,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateBookmarks
+                    )
+                    ModernExploreActionButton(
+                        title = "Random",
+                        icon = Icons.Rounded.Casino,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            scope.launch {
+                                val popular = sourceRegistry.fetchPopular()
+                                val random = popular.randomOrNull()
+                                if (random != null) onOpenManga(random)
                             }
-                        )
-                        ModernExploreActionButton(
-                            title = "Downloads",
-                            subtitle = "Active chapter queue",
-                            icon = Icons.Rounded.Download,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateDownloads
-                        )
-                    }
+                        }
+                    )
+                    ModernExploreActionButton(
+                        title = "Downloads",
+                        icon = Icons.Rounded.Download,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateDownloads
+                    )
                 }
 
                 // Filter Chips Row (Including requested "New chapters", "18+", "Self-published")
@@ -692,7 +676,6 @@ fun ExploreScreen(
 @Composable
 private fun ModernExploreActionButton(
     title: String,
-    subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -702,14 +685,15 @@ private fun ModernExploreActionButton(
     val hovered by interaction.collectIsHoveredAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.02f else 1f,
+        targetValue = if (hovered) 1.03f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
     )
 
     Surface(
         color = if (hovered) tokens.surfaceContainerHigh else tokens.surfaceContainer,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         modifier = modifier
+            .height(44.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -717,48 +701,32 @@ private fun ModernExploreActionButton(
             .border(
                 width = 1.dp,
                 color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(12.dp)
             )
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .hoverable(interaction)
             .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(tokens.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = tokens.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = title,
-                    color = tokens.textPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    color = tokens.textMuted,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = if (hovered) tokens.primary else tokens.textPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = title,
+                color = if (hovered) tokens.primary else tokens.textPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
