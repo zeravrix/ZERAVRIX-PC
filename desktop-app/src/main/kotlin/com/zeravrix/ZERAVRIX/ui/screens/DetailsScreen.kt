@@ -1,41 +1,32 @@
 package com.zeravrix.zeravrix.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,8 +60,8 @@ private fun oldestFirst(list: List<Chapter>): List<Chapter> = list.distinctBy { 
 private fun numberText(n: Float?): String = n?.toString()?.removeSuffix(".0") ?: "?"
 
 /**
- * Kotatsu landscape title screen: left pane (cover, favourite, info card, description) and right pane
- * (Continue split button, sort toggle, chapter list with download management and volume headers).
+ * Kotatsu landscape title details: left pane (cover, favourite, info card, synopsis) and right pane
+ * (Continue split button, sort toggle, chapter list with CBZ download management).
  */
 @Composable
 fun DetailsScreen(
@@ -165,32 +156,73 @@ fun DetailsScreen(
 
     ZTwoPane(
         left = {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "←",
-                        color = tokens.textPrimary,
-                        fontSize = 22.sp,
-                        modifier = Modifier.clip(CircleShape).clickable(onClick = onBack).padding(horizontal = 14.dp, vertical = 8.dp),
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp)
+            ) {
+                // Back Button
+                FilledTonalButton(
+                    onClick = onBack,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = tokens.surfaceContainerHigh,
+                        contentColor = tokens.textPrimary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(16.dp)
                     )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Back", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.Top) {
-                    Box(Modifier.weight(0.34f).aspectRatio(13f / 18f).clip(RoundedCornerShape(14.dp)).background(tokens.surfaceGlassRaised)) {
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    // 3D Cover View
+                    Surface(
+                        modifier = Modifier
+                            .weight(0.36f)
+                            .aspectRatio(13f / 18f),
+                        shape = RoundedCornerShape(14.dp),
+                        color = tokens.surfaceContainerHigh,
+                        shadowElevation = 8.dp
+                    ) {
                         RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
                     }
+
                     Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(0.66f)) {
-                        Text(manga.title, color = tokens.textPrimary, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Medium, maxLines = 4, overflow = TextOverflow.Ellipsis)
+
+                    Column(Modifier.weight(0.64f)) {
+                        Text(
+                            text = manga.title,
+                            color = tokens.textPrimary,
+                            fontSize = 22.sp,
+                            lineHeight = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         val subtitle = manga.author ?: manga.genres.firstOrNull()
                         if (subtitle != null) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(subtitle, color = tokens.textMuted, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = subtitle,
+                                color = tokens.textMuted,
+                                fontSize = 14.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         Spacer(Modifier.height(14.dp))
                         ZChip(
-                            label = if (inLibrary) "In favourites" else "Favourite this",
-                            icon = if (inLibrary) "♥" else "♡",
+                            label = if (inLibrary) "In favourites" else "Add to favourites",
+                            icon = if (inLibrary) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                             selected = inLibrary,
                             onClick = {
                                 if (inLibrary) libraryStore.remove(manga.id) else libraryStore.add(manga)
@@ -199,11 +231,13 @@ fun DetailsScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+
+                Spacer(Modifier.height(18.dp))
+
                 InfoCard {
                     InfoRow("Source", sourceRegistry.get(manga.sourceId)?.name ?: "—")
                     manga.author?.let { InfoRow("Author", it) }
-                    InfoRow("State", manga.status ?: "—")
+                    InfoRow("Status", manga.status ?: "Ongoing")
                     InfoRow(
                         "Chapters",
                         when {
@@ -213,57 +247,83 @@ fun DetailsScreen(
                         },
                     )
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Progress", color = tokens.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(96.dp))
-                        Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(tokens.borderGlass)) {
+                        Text("Progress", color = tokens.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(96.dp))
+                        Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(tokens.borderGlass)) {
                             Box(Modifier.fillMaxWidth(percent / 100f).fillMaxHeight().background(tokens.primary))
                         }
-                        Text("$percent%", color = tokens.textPrimary, fontSize = 14.sp, modifier = Modifier.padding(start = 12.dp))
+                        Text("$percent%", color = tokens.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
                     }
                 }
+
                 Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Description", color = tokens.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Synopsis", color = tokens.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text(
-                        if (descriptionExpanded) "Less" else "More",
+                        text = if (descriptionExpanded) "Show less" else "Read more",
                         color = tokens.primary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { descriptionExpanded = !descriptionExpanded }.padding(8.dp),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { descriptionExpanded = !descriptionExpanded }.padding(4.dp),
                     )
                 }
+
+                Spacer(Modifier.height(6.dp))
+
                 Text(
-                    manga.description.ifBlank { "No synopsis available." },
-                    color = tokens.textPrimary,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp,
+                    text = manga.description.ifBlank { "No synopsis available for this title." },
+                    color = tokens.textMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
                     maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 4.dp),
                 )
+
                 if (manga.genres.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
-                    Text(manga.genres.joinToString("  •  "), color = tokens.textMuted, fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text(
+                        text = manga.genres.joinToString("  •  "),
+                        color = tokens.primary.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
                 }
             }
         },
         right = {
             Surface(
                 color = tokens.surfaceGlassRaised,
-                shape = RoundedCornerShape(topStart = 28.dp),
-                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(topStart = 24.dp),
+                modifier = Modifier.fillMaxSize().border(1.dp, tokens.borderGlass, RoundedCornerShape(topStart = 24.dp)),
             ) {
                 Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         val target = chapters.firstOrNull { it.id == currentId } ?: chapters.firstOrNull()
                         if (target != null) {
                             ZSplitButton(
                                 label = if (progress != null && currentIndex >= 0) "Continue" else "Start reading",
                                 onClick = { onRead(target, startPageFor(target)) },
                             ) { dismiss ->
-                                DropdownMenuItem(text = { Text("Continue") }, onClick = { dismiss(); onRead(target, startPageFor(target)) })
-                                DropdownMenuItem(text = { Text("Start from the first chapter") }, onClick = { dismiss(); onRead(chapters.first(), 0) })
-                                DropdownMenuItem(text = { Text("Jump to the last chapter") }, onClick = { dismiss(); onRead(chapters.last(), 0) })
                                 DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = tokens.primary) },
+                                    text = { Text("Continue") },
+                                    onClick = { dismiss(); onRead(target, startPageFor(target)) }
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Rounded.FirstPage, contentDescription = null, tint = tokens.primary) },
+                                    text = { Text("Start from first chapter") },
+                                    onClick = { dismiss(); onRead(chapters.first(), 0) }
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Rounded.LastPage, contentDescription = null, tint = tokens.primary) },
+                                    text = { Text("Jump to latest chapter") },
+                                    onClick = { dismiss(); onRead(chapters.last(), 0) }
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null, tint = tokens.primary) },
                                     text = { Text("Download next 5 unread (CBZ)") },
                                     onClick = {
                                         dismiss()
@@ -274,43 +334,56 @@ fun DetailsScreen(
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("${chapters.size} chapters", color = tokens.textMuted, fontSize = 13.sp)
+                        Text("${chapters.size} chapters", color = tokens.textMuted, fontSize = 12.sp)
                         Spacer(Modifier.width(12.dp))
                         ZChip(
                             label = if (newestFirst) "Newest first" else "Oldest first",
-                            icon = if (newestFirst) "↓" else "↑",
+                            icon = if (newestFirst) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward,
                             selected = false,
                             onClick = { newestFirst = !newestFirst },
                         )
                     }
+
                     when {
-                        chapters.isEmpty() && loading -> Text("Loading chapters…", color = tokens.textMuted, fontSize = 15.sp, modifier = Modifier.padding(24.dp))
-                        chapters.isEmpty() -> Text("No chapters found", color = tokens.textMuted, fontSize = 15.sp, modifier = Modifier.padding(24.dp))
-                        else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
-                            items(rows, key = { row ->
-                                when (row) {
-                                    is ChapterRow.Header -> row.key
-                                    is ChapterRow.Item -> "c:${row.chapter.id}"
-                                }
-                            }) { row ->
-                                when (row) {
-                                    is ChapterRow.Header -> Text(
-                                        row.text,
-                                        color = tokens.textPrimary,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 16.dp, bottom = 4.dp),
-                                    )
-                                    is ChapterRow.Item -> {
-                                        val isDownloaded = row.chapter.id in downloadedChapterIds
-                                        val dlProgress = downloadingChapterProgress[row.chapter.id]
-                                        ChapterListRow(
-                                            row = row,
-                                            isDownloaded = isDownloaded,
-                                            downloadProgress = dlProgress,
-                                            onDownloadClick = { startDownload(row.chapter) },
-                                            onClick = { onRead(row.chapter, startPageFor(row.chapter)) }
-                                        )
+                        chapters.isEmpty() && loading -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = tokens.primary)
+                            }
+                        }
+                        chapters.isEmpty() -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("No chapters found for this title.", color = tokens.textMuted)
+                            }
+                        }
+                        else -> {
+                            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+                                items(rows, key = { row ->
+                                    when (row) {
+                                        is ChapterRow.Header -> row.key
+                                        is ChapterRow.Item -> "c:${row.chapter.id}"
+                                    }
+                                }) { row ->
+                                    when (row) {
+                                        is ChapterRow.Header -> {
+                                            Text(
+                                                text = row.text,
+                                                color = tokens.primary,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 16.dp, bottom = 4.dp),
+                                            )
+                                        }
+                                        is ChapterRow.Item -> {
+                                            val isDownloaded = row.chapter.id in downloadedChapterIds
+                                            val dlProgress = downloadingChapterProgress[row.chapter.id]
+                                            ModernChapterListRow(
+                                                row = row,
+                                                isDownloaded = isDownloaded,
+                                                downloadProgress = dlProgress,
+                                                onDownloadClick = { startDownload(row.chapter) },
+                                                onClick = { onRead(row.chapter, startPageFor(row.chapter)) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -325,23 +398,28 @@ fun DetailsScreen(
 @Composable
 private fun InfoCard(content: @Composable () -> Unit) {
     val tokens = LocalGlassTokens.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(tokens.surfaceGlassRaised).border(1.dp, tokens.borderGlass, shape).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(tokens.surfaceCard)
+            .border(1.dp, tokens.borderGlass, shape)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) { content() }
 }
 
 @Composable
 private fun InfoRow(label: String, value: String) {
     val tokens = LocalGlassTokens.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
-        Text(label, color = tokens.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(96.dp))
-        Text(value, color = tokens.textPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
+        Text(label, color = tokens.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(96.dp))
+        Text(value, color = tokens.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun ChapterListRow(
+private fun ModernChapterListRow(
     row: ChapterRow.Item,
     isDownloaded: Boolean,
     downloadProgress: Int?,
@@ -352,6 +430,7 @@ private fun ChapterListRow(
     val chapter = row.chapter
     val titleColor = when (row.state) {
         ReadState.READ -> tokens.textMuted
+        ReadState.CURRENT -> tokens.primary
         else -> tokens.textPrimary
     }
     val subtitle = buildList {
@@ -360,52 +439,82 @@ private fun ChapterListRow(
         chapter.scanlator?.takeIf { it.isNotBlank() }?.let { add(it) }
     }.joinToString(" • ")
 
-    Row(
-        Modifier
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    Surface(
+        color = when {
+            row.state == ReadState.CURRENT -> tokens.primaryContainer.copy(alpha = 0.35f)
+            hovered -> tokens.surfaceContainerHigh
+            else -> Color.Transparent
+        },
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .hoverable(interaction)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(22.dp)) {
-            if (row.state == ReadState.CURRENT) Text("▶", color = tokens.primary, fontSize = 12.sp)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                chapter.title,
-                color = titleColor,
-                fontSize = 17.sp,
-                fontWeight = if (row.state == ReadState.CURRENT) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(subtitle, color = tokens.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        // Download Action Button
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable(onClick = onDownloadClick)
-                .padding(6.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            when {
-                downloadProgress != null -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = tokens.primary)
-                        Spacer(Modifier.width(4.dp))
-                        Text("$downloadProgress%", fontSize = 10.sp, color = tokens.primary, fontWeight = FontWeight.Bold)
+            Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterStart) {
+                if (row.state == ReadState.CURRENT) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Current Chapter",
+                        tint = tokens.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = chapter.title,
+                    color = titleColor,
+                    fontSize = 14.sp,
+                    fontWeight = if (row.state == ReadState.CURRENT) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(subtitle, color = tokens.textMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            // Download Action Button
+            IconButton(
+                onClick = onDownloadClick,
+                modifier = Modifier.size(32.dp)
+            ) {
+                when {
+                    downloadProgress != null -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = tokens.primary)
+                            Spacer(Modifier.width(4.dp))
+                            Text("$downloadProgress%", fontSize = 9.sp, color = tokens.primary, fontWeight = FontWeight.Bold)
+                        }
                     }
-                }
-                isDownloaded -> {
-                    Text("✓", color = tokens.primary, fontSize = 16.sp, fontWeight = FontWeight.Black)
-                }
-                else -> {
-                    Text("⬇", color = tokens.textMuted, fontSize = 16.sp)
+                    isDownloaded -> {
+                        Icon(
+                            imageVector = Icons.Rounded.CheckCircle,
+                            contentDescription = "Downloaded CBZ",
+                            tint = tokens.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = Icons.Rounded.Download,
+                            contentDescription = "Download Chapter",
+                            tint = tokens.textMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

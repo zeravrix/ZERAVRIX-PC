@@ -1,18 +1,28 @@
 package com.zeravrix.zeravrix.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,7 +43,7 @@ data class FeedItem(
 )
 
 /**
- * Replicates Kotatsu's FeedFragment & item_feed.xml
+ * Replicates Kotatsu's FeedFragment & item_feed.xml with Material 3 polish
  */
 @Composable
 fun FeedScreen(
@@ -86,7 +96,7 @@ fun FeedScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -105,16 +115,32 @@ fun FeedScreen(
                 )
             }
 
-            Button(
+            FilledTonalButton(
                 onClick = { loadFeed() },
                 enabled = !isRefreshing,
-                colors = ButtonDefaults.buttonColors(
+                colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = tokens.surfaceContainerHigh,
                     contentColor = tokens.primary
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text(if (isRefreshing) "Refreshing..." else "↻ Check Updates", fontSize = 12.sp)
+                if (isRefreshing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = tokens.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Refreshing...", fontSize = 12.sp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Check Updates", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
@@ -124,26 +150,33 @@ fun FeedScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📰", fontSize = 48.sp)
-                    Spacer(Modifier.height(12.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.DynamicFeed,
+                        contentDescription = null,
+                        tint = tokens.primary.copy(alpha = 0.4f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(Modifier.height(14.dp))
                     Text(
                         "Your feed is empty",
                         color = tokens.textPrimary,
-                        fontSize = 16.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Add manga to Favourites to track new releases here.",
+                        "Add manga to Favourites to automatically track new releases here.",
                         color = tokens.textMuted,
                         fontSize = 13.sp
                     )
                     Spacer(Modifier.height(16.dp))
-                    Button(
+                    FilledTonalButton(
                         onClick = onExploreClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = tokens.primary, contentColor = tokens.onPrimary),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = tokens.primary, contentColor = tokens.onPrimary),
                         shape = RoundedCornerShape(12.dp)
                     ) {
+                        Icon(Icons.Rounded.Explore, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text("Explore Sources", fontWeight = FontWeight.Bold)
                     }
                 }
@@ -158,7 +191,7 @@ fun FeedScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(feedItems, key = { "${it.manga.id}_${it.chapter.id}" }) { item ->
-                    FeedItemRow(
+                    ModernFeedItemRow(
                         item = item,
                         onClickManga = { onOpenManga(item.manga) },
                         onRead = { onReadChapter(item.manga, item.chapter) }
@@ -170,10 +203,10 @@ fun FeedScreen(
 }
 
 /**
- * Matches Kotatsu item_feed.xml: 40x40 cover, title, summary, read button
+ * Matches Kotatsu item_feed.xml with cyber-glass elevation and vector badges
  */
 @Composable
-private fun FeedItemRow(
+private fun ModernFeedItemRow(
     item: FeedItem,
     onClickManga: () -> Unit,
     onRead: () -> Unit,
@@ -186,13 +219,35 @@ private fun FeedItemRow(
         } else "Recent"
     }
 
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.01f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
     Surface(
-        color = tokens.surfaceContainer,
+        color = if (hovered) tokens.surfaceContainerHigh else tokens.surfaceContainer,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .border(
+                width = if (hovered) 1.dp else 1.dp,
+                color = if (hovered) tokens.borderGlow else tokens.outlineVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .shadow(
+                elevation = if (hovered) 6.dp else 1.dp,
+                shape = RoundedCornerShape(12.dp),
+                spotColor = tokens.primary
+            )
+            .hoverable(interaction)
             .clickable(onClick = onClickManga)
     ) {
         Row(
@@ -201,10 +256,10 @@ private fun FeedItemRow(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 40x40 Cover Image
+            // 44x58 Cover Thumbnail
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(width = 44.dp, height = 58.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(tokens.surfaceContainerHigh)
             ) {
@@ -222,7 +277,7 @@ private fun FeedItemRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = item.chapter.title,
@@ -248,10 +303,20 @@ private fun FeedItemRow(
                     containerColor = if (item.isRead) tokens.surfaceContainerHigh else tokens.primary,
                     contentColor = if (item.isRead) tokens.textMuted else tokens.onPrimary
                 ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text(if (item.isRead) "Re-read" else "Read", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = if (item.isRead) Icons.Rounded.Replay else Icons.Rounded.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (item.isRead) "Re-read" else "Read",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

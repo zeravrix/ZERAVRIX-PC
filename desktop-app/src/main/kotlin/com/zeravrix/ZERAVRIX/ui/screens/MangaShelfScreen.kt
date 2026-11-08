@@ -1,35 +1,33 @@
 package com.zeravrix.zeravrix.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,12 +53,12 @@ enum class ShelfKind(val title: String) {
     DOWNLOADS("Downloads"),
 }
 
-private enum class ShelfFilter(val label: String, val icon: String) {
-    ON_DEVICE("On device", "▣"),
-    READING("Reading", "▶"),
-    COMPLETED("Completed", "✓"),
-    FAVOURITES("Favourites", "♡"),
-    NOT_IN_FAVOURITES("Not in favourites", "⊘"),
+private enum class ShelfFilter(val label: String, val icon: ImageVector) {
+    ON_DEVICE("On device", Icons.Rounded.Devices),
+    READING("Reading", Icons.Rounded.PlayArrow),
+    COMPLETED("Completed", Icons.Rounded.Check),
+    FAVOURITES("Favourites", Icons.Rounded.Favorite),
+    NOT_IN_FAVOURITES("Not in favourites", Icons.Rounded.Block),
 }
 
 private data class ShelfEntry(
@@ -132,7 +130,7 @@ private fun groupLabel(updatedAt: Long): String {
     }
 }
 
-/** History / Favourites / Downloads in Kotatsu's landscape layout: search bar, filter chips, (grouped) cover grid. */
+/** History / Favourites / Downloads in Kotatsu's landscape layout with Material 3 vector styling */
 @Composable
 fun MangaShelfScreen(
     kind: ShelfKind,
@@ -182,8 +180,19 @@ fun MangaShelfScreen(
         if (visibleEntries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = when (kind) {
+                            ShelfKind.DOWNLOADS -> Icons.Rounded.DownloadDone
+                            ShelfKind.HISTORY -> Icons.Rounded.History
+                            else -> Icons.Rounded.FavoriteBorder
+                        },
+                        contentDescription = null,
+                        tint = tokens.primary.copy(alpha = 0.4f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(Modifier.height(14.dp))
                     Text(
-                        when {
+                        text = when {
                             query.isNotBlank() -> "No matching titles"
                             kind == ShelfKind.DOWNLOADS -> "No downloaded chapters"
                             kind == ShelfKind.HISTORY -> "Reading history is empty"
@@ -191,19 +200,31 @@ fun MangaShelfScreen(
                         },
                         color = tokens.textPrimary,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        when {
-                            query.isNotBlank() -> "Try a different search word"
+                        text = when {
+                            query.isNotBlank() -> "Try searching for a different title"
                             kind == ShelfKind.DOWNLOADS -> "Download a chapter from any title's details screen to read offline"
                             kind == ShelfKind.HISTORY -> "Titles you open or read will appear here"
                             else -> "Browse sources in Explore to find manga you like"
                         },
                         color = tokens.textMuted,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                     )
+                    if (kind == ShelfKind.FAVOURITES && query.isBlank()) {
+                        Spacer(Modifier.height(16.dp))
+                        FilledTonalButton(
+                            onClick = onExploreClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = tokens.primary, contentColor = tokens.onPrimary)
+                        ) {
+                            Icon(Icons.Rounded.Explore, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Explore Manga", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
             return
@@ -223,7 +244,7 @@ fun MangaShelfScreen(
         }
 
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 132.dp),
+            columns = GridCells.Adaptive(minSize = 136.dp),
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -245,34 +266,59 @@ fun MangaShelfScreen(
 private fun ShelfCard(entry: ShelfEntry, onClick: () -> Unit) {
     val tokens = LocalGlassTokens.current
     val manga = entry.manga
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.04f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(RoundedCornerShape(12.dp))
+            .hoverable(interaction)
             .clickable(onClick = onClick),
     ) {
-        Box(
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = tokens.surfaceContainerHigh,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(13f / 18f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(tokens.surfaceGlassRaised),
-        ) {
-            RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
-            if (entry.percent != null && entry.percent > 0) {
-                ProgressBadge(
-                    percent = entry.percent,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                .border(
+                    width = if (hovered) 1.5.dp else 1.dp,
+                    color = if (hovered) tokens.borderGlow else tokens.borderGlass,
+                    shape = RoundedCornerShape(12.dp)
                 )
+                .shadow(
+                    elevation = if (hovered) 10.dp else 2.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    spotColor = tokens.primary
+                )
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
+                if (entry.percent != null && entry.percent > 0) {
+                    ProgressBadge(
+                        percent = entry.percent,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            manga.title,
-            color = tokens.textPrimary,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.Medium,
+            text = manga.title,
+            color = if (hovered) tokens.primary else tokens.textPrimary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )

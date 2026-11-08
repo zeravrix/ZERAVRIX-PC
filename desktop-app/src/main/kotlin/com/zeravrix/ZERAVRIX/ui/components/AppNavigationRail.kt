@@ -1,5 +1,11 @@
 package com.zeravrix.zeravrix.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,29 +17,38 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
+import org.jetbrains.skia.Image as SkiaImage
 
 /**
- * Authentic Kotatsu Landscape Navigation Items
+ * Authentic Kotatsu Landscape Navigation Items with High-Quality Material Icons
  */
-enum class AppNavScreen(val id: String, val icon: String, val title: String) {
-    HISTORY("history", "🕒", "History"),
-    FAVOURITES("favourites", "♥", "Favourites"),
-    DOWNLOADS("downloads", "⬇", "Downloads"),
-    EXPLORE("explore", "🧭", "Explore"),
-    FEED("feed", "📰", "Feed"),
-    SETTINGS("settings", "⚙", "Settings");
+enum class AppNavScreen(
+    val id: String,
+    val icon: ImageVector,
+    val title: String,
+) {
+    HISTORY("history", Icons.Rounded.History, "History"),
+    FAVOURITES("favourites", Icons.Rounded.Favorite, "Favourites"),
+    DOWNLOADS("downloads", Icons.Rounded.Download, "Downloads"),
+    EXPLORE("explore", Icons.Rounded.Explore, "Explore"),
+    FEED("feed", Icons.Rounded.DynamicFeed, "Feed"),
+    SETTINGS("settings", Icons.Rounded.Settings, "Settings");
 
     // Backward compatibility aliases
     companion object {
@@ -45,6 +60,7 @@ enum class AppNavScreen(val id: String, val icon: String, val title: String) {
 
 /**
  * Replicates Kotatsu's layout-w600dp-land/activity_main.xml navigation rail
+ * Enhanced with modern Glassmorphism, smooth animations & vector typography
  */
 @Composable
 fun AppNavigationRail(
@@ -56,82 +72,110 @@ fun AppNavigationRail(
 ) {
     val tokens = LocalGlassTokens.current
 
-    NavigationRail(
+    val logoBitmap = remember {
+        runCatching {
+            val bytes = object {}.javaClass.getResourceAsStream("/logo.png")?.readBytes()
+            if (bytes != null && bytes.isNotEmpty()) {
+                SkiaImage.makeFromEncoded(bytes).toComposeImageBitmap()
+            } else null
+        }.getOrNull()
+    }
+
+    Surface(
         modifier = Modifier
             .fillMaxHeight()
-            .width(92.dp),
-        containerColor = tokens.surfaceContainer,
-        contentColor = tokens.textPrimary,
-        header = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)
+            .width(88.dp)
+            .border(
+                width = 1.dp,
+                color = tokens.borderGlass,
+                shape = RoundedCornerShape(0.dp)
+            ),
+        color = tokens.surfaceGlass,
+        contentColor = tokens.textPrimary
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // App Branding Mark
+            Surface(
+                color = tokens.primaryContainer.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .size(46.dp)
+                    .border(1.dp, tokens.borderGlow.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                    .shadow(elevation = 6.dp, shape = RoundedCornerShape(14.dp), spotColor = tokens.primary)
             ) {
-                // App Logo Badge
-                Surface(
-                    color = tokens.primaryContainer,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .size(42.dp)
-                        .border(1.dp, tokens.outlineVariant, RoundedCornerShape(12.dp))
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(6.dp)) {
+                    if (logoBitmap != null) {
+                        Image(
+                            bitmap = logoBitmap,
+                            contentDescription = "ZERAVRIX",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
                         Text(
                             "ZX",
                             color = tokens.primary,
-                            fontSize = 15.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Black
                         )
                     }
                 }
+            }
 
-                Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
-                // Kotatsu Navigation Rail FAB (Resume Reading)
-                if (hasResumeTarget && onResumeReading != null) {
-                    FloatingActionButton(
-                        onClick = onResumeReading,
-                        containerColor = tokens.primary,
-                        contentColor = tokens.onPrimary,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Text("▶", fontSize = 16.sp)
-                    }
-                    Spacer(Modifier.height(12.dp))
+            // Kotatsu Navigation Rail FAB (Resume Reading)
+            if (hasResumeTarget && onResumeReading != null) {
+                FloatingActionButton(
+                    onClick = onResumeReading,
+                    containerColor = tokens.primary,
+                    contentColor = tokens.onPrimary,
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                    modifier = Modifier.size(50.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Resume Reading",
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // Navigation Destination Items
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                AppNavScreen.entries.forEach { screen ->
+                    val selected = currentScreen == screen
+                    val badge = if (screen == AppNavScreen.FEED && feedBadgeCount > 0) feedBadgeCount.toString() else null
+
+                    KotatsuNavRailItem(
+                        screen = screen,
+                        selected = selected,
+                        badge = badge,
+                        onClick = { onScreenSelect(screen) }
+                    )
                 }
             }
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            AppNavScreen.entries.forEach { screen ->
-                val selected = currentScreen == screen
-                val badge = if (screen == AppNavScreen.FEED && feedBadgeCount > 0) feedBadgeCount.toString() else null
-
-                KotatsuNavRailItem(
-                    screen = screen,
-                    selected = selected,
-                    badge = badge,
-                    onClick = { onScreenSelect(screen) }
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
 
             // Bottom Brand Text
             Text(
                 "ZERAVRIX",
-                color = tokens.textMuted.copy(alpha = 0.5f),
+                color = tokens.textMuted.copy(alpha = 0.6f),
                 fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.5.sp,
+                modifier = Modifier.padding(top = 8.dp)
             )
         }
     }
@@ -148,23 +192,45 @@ private fun KotatsuNavRailItem(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
 
-    val containerColor = when {
-        selected -> tokens.primaryContainer
-        hovered -> tokens.surfaceContainerHigh
-        else -> Color.Transparent
-    }
+    // Smooth hover / active animations
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 56.dp else if (hovered) 48.dp else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
 
-    val contentColor = when {
-        selected -> tokens.primary
-        hovered -> tokens.textPrimary
-        else -> tokens.textMuted
-    }
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            selected -> tokens.primaryContainer
+            hovered -> tokens.surfaceContainerHigh
+            else -> Color.Transparent
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val iconColor by animateColorAsState(
+        targetValue = when {
+            selected -> tokens.primary
+            hovered -> tokens.textPrimary
+            else -> tokens.textMuted
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.05f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp, horizontal = 6.dp)
+            .padding(vertical = 2.dp, horizontal = 6.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(16.dp))
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
     ) {
@@ -172,15 +238,16 @@ private fun KotatsuNavRailItem(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(width = 56.dp, height = 32.dp)
+                .width(56.dp)
+                .height(32.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(containerColor)
         ) {
-            Text(
-                text = screen.icon,
-                color = contentColor,
-                fontSize = 17.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+            Icon(
+                imageVector = screen.icon,
+                contentDescription = screen.title,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
             )
 
             if (badge != null) {
@@ -197,11 +264,11 @@ private fun KotatsuNavRailItem(
             }
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
 
         Text(
             text = screen.title,
-            color = contentColor,
+            color = iconColor,
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
         )

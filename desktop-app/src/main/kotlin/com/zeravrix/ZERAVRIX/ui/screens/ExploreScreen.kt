@@ -1,9 +1,16 @@
 package com.zeravrix.zeravrix.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -12,12 +19,17 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,10 +48,10 @@ import org.koitharu.kotatsu.parsers.model.SortOrder
 /**
  * Restyled Kotatsu Landscape Explore & Sources Screen
  * Featuring:
- * - Search bar with instant suggestions
- * - Kotatsu 4 Action Buttons (Local Storage, Bookmarks, Random Manga, Downloads)
+ * - High-speed search bar with instant vector clear
+ * - Modern Glass Action Buttons (Local Storage, Bookmarks, Random Manga, Downloads)
  * - Required Filter Chips: "New chapters", "18+", "Self-published", and categories
- * - Pinned Sources Grid (72x72 cards)
+ * - Pinned Sources Grid with cyber-glass badges & hover physics
  * - Full 1000+ Sources Catalog with language filter and pinning
  * - Remote Source Manga Catalogue with sorting and pagination
  */
@@ -77,9 +89,9 @@ fun ExploreScreen(
         mutableStateOf(
             setOf(
                 "MANGADEX",
+                "MANGAKAKALOT",
                 "ASURASCANS",
                 "FLAMECOMICS",
-                "MANGAKAKALOT",
                 "MANGASEE",
                 "BATOTO",
                 "WEBTOONS_EN",
@@ -162,34 +174,34 @@ fun ExploreScreen(
     ) {
         when (viewMode) {
             "EXPLORE" -> {
-                // Search Bar matching ZKit
+                // High-performance search bar
                 ZSearchBar(
                     query = searchQuery,
                     onQueryChange = onSearchChange,
-                    hint = "Search 1000+ sources by title or author…",
+                    hint = "Search 1000+ sources by manhwa, manga or author…",
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 )
 
-                // Kotatsu 4 Action Buttons Row
+                // Kotatsu 4 Action Buttons Row with Modern Vector Icons & Hover Physics
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    ExploreActionButton(
+                    ModernExploreActionButton(
                         title = "Local storage",
-                        icon = "📁",
+                        icon = Icons.Rounded.Folder,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateLocal
                     )
-                    ExploreActionButton(
+                    ModernExploreActionButton(
                         title = "Bookmarks",
-                        icon = "🔖",
+                        icon = Icons.Rounded.Bookmark,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateBookmarks
                     )
-                    ExploreActionButton(
+                    ModernExploreActionButton(
                         title = "Random manga",
-                        icon = "🎲",
+                        icon = Icons.Rounded.Casino,
                         modifier = Modifier.weight(1f),
                         onClick = {
                             scope.launch {
@@ -199,9 +211,9 @@ fun ExploreScreen(
                             }
                         }
                     )
-                    ExploreActionButton(
+                    ModernExploreActionButton(
                         title = "Downloads",
-                        icon = "⬇",
+                        icon = Icons.Rounded.Download,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateDownloads
                     )
@@ -217,19 +229,19 @@ fun ExploreScreen(
                 ) {
                     ZChip(
                         label = "New chapters",
-                        icon = "✦",
+                        icon = Icons.Rounded.AutoAwesome,
                         selected = filterNewChapters,
                         onClick = { filterNewChapters = !filterNewChapters }
                     )
                     ZChip(
                         label = "18+",
-                        icon = "🔞",
+                        icon = Icons.Rounded.Explicit,
                         selected = filterNsfw,
                         onClick = { filterNsfw = !filterNsfw }
                     )
                     ZChip(
                         label = "Self-published",
-                        icon = "✎",
+                        icon = Icons.Rounded.Edit,
                         selected = filterSelfPublished,
                         onClick = { filterSelfPublished = !filterSelfPublished }
                     )
@@ -252,19 +264,31 @@ fun ExploreScreen(
                     Text(
                         "PINNED SOURCES",
                         color = tokens.textPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
                     )
 
-                    Button(
+                    FilledTonalButton(
                         onClick = { viewMode = "CATALOG" },
-                        colors = ButtonDefaults.buttonColors(
+                        colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = tokens.surfaceContainerHigh,
                             contentColor = tokens.primary
                         ),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
-                        Text("Sources Catalog (${allParsers.size})", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Icon(
+                            imageVector = Icons.Rounded.Language,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Sources Catalog (${allParsers.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
@@ -274,11 +298,11 @@ fun ExploreScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(bottom = 18.dp),
+                        .padding(bottom = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     pinnedParsers.forEach { parser ->
-                        KotatsuSourceFaviconItem(
+                        ModernKotatsuSourceBadge(
                             parser = parser,
                             onClick = {
                                 val adapter = sourceRegistry.getOrCreateAdapter(parser)
@@ -294,10 +318,11 @@ fun ExploreScreen(
                 }
 
                 Text(
-                    if (searchQuery.isNotBlank()) "SEARCH RESULTS" else "POPULAR DISCOVERIES",
+                    text = if (searchQuery.isNotBlank()) "SEARCH RESULTS" else "POPULAR DISCOVERIES",
                     color = tokens.textPrimary,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
                     modifier = Modifier.padding(bottom = 10.dp)
                 )
 
@@ -311,13 +336,13 @@ fun ExploreScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 132.dp),
+                        columns = GridCells.Adaptive(minSize = 136.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredExploreList, key = { it.id }) { manga ->
-                            KotatsuMangaCard(
+                            ModernMangaCard(
                                 manga = manga,
                                 onClick = { onOpenManga(manga) }
                             )
@@ -332,12 +357,18 @@ fun ExploreScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
+                    FilledTonalButton(
                         onClick = { viewMode = "EXPLORE" },
-                        colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary),
-                        shape = RoundedCornerShape(10.dp)
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = tokens.surfaceContainerHigh,
+                            contentColor = tokens.textPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text("← Back", fontSize = 12.sp)
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Back", fontSize = 12.sp)
                     }
 
                     Spacer(Modifier.width(16.dp))
@@ -346,7 +377,8 @@ fun ExploreScreen(
                         "SOURCES CATALOG (1000+ PARSERS)",
                         color = tokens.primary,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
                     )
 
                     Spacer(Modifier.weight(1f))
@@ -360,6 +392,8 @@ fun ExploreScreen(
                             onClick = { langMenuExpanded = true },
                             shape = RoundedCornerShape(10.dp)
                         ) {
+                            Icon(Icons.Rounded.Language, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text("Language: $catalogLanguage", fontSize = 12.sp)
                         }
                         DropdownMenu(
@@ -385,7 +419,10 @@ fun ExploreScreen(
                 OutlinedTextField(
                     value = catalogSearch,
                     onValueChange = { catalogSearch = it },
-                    placeholder = { Text("Search sources by name...") },
+                    placeholder = { Text("Search sources by name or language...") },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = tokens.primary)
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
@@ -428,17 +465,17 @@ fun ExploreScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
                                     color = tokens.primaryContainer,
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(42.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Text(
-                                            parser.title.take(2).uppercase(),
+                                            text = parser.title.take(2).uppercase(),
                                             color = tokens.primary,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp
@@ -450,13 +487,13 @@ fun ExploreScreen(
 
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        parser.title,
+                                        text = parser.title,
                                         color = tokens.textPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        "Locale: ${parser.locale.uppercase()}",
+                                        text = "Language: ${parser.locale.uppercase()}",
                                         color = tokens.textMuted,
                                         fontSize = 11.sp
                                     )
@@ -471,7 +508,12 @@ fun ExploreScreen(
                                         }
                                     }
                                 ) {
-                                    Text(if (isPinned) "📌" else "📍", fontSize = 16.sp)
+                                    Icon(
+                                        imageVector = if (isPinned) Icons.Rounded.PushPin else Icons.Rounded.Add,
+                                        contentDescription = if (isPinned) "Unpin" else "Pin",
+                                        tint = if (isPinned) tokens.primary else tokens.textMuted,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }
@@ -485,25 +527,31 @@ fun ExploreScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
+                    FilledTonalButton(
                         onClick = { viewMode = "EXPLORE" },
-                        colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary),
-                        shape = RoundedCornerShape(10.dp)
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = tokens.surfaceContainerHigh,
+                            contentColor = tokens.textPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text("← Sources", fontSize = 12.sp)
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Sources", fontSize = 12.sp)
                     }
 
                     Spacer(Modifier.width(14.dp))
 
                     Column {
                         Text(
-                            src.name,
+                            text = src.name,
                             color = tokens.textPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Page $sourcePage • ${src.language.uppercase()}",
+                            text = "Page $sourcePage • ${src.language.uppercase()}",
                             color = tokens.primary,
                             fontSize = 11.sp
                         )
@@ -517,6 +565,8 @@ fun ExploreScreen(
                             onClick = { sortMenuExpanded = true },
                             shape = RoundedCornerShape(10.dp)
                         ) {
+                            Icon(Icons.Rounded.Sort, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text("Sort: ${sourceSortOrder.name.lowercase().replaceFirstChar { it.uppercase() }}", fontSize = 12.sp)
                         }
                         DropdownMenu(
@@ -546,6 +596,9 @@ fun ExploreScreen(
                         sourcePage = 1
                     },
                     placeholder = { Text("Search on ${src.name}...") },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = tokens.primary)
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
@@ -567,13 +620,13 @@ fun ExploreScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 132.dp),
+                        columns = GridCells.Adaptive(minSize = 136.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         items(sourceMangaList, key = { it.id }) { manga ->
-                            KotatsuMangaCard(
+                            ModernMangaCard(
                                 manga = manga,
                                 onClick = { onOpenManga(manga) }
                             )
@@ -587,25 +640,27 @@ fun ExploreScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
+                        FilledTonalButton(
                             onClick = { if (sourcePage > 1) sourcePage-- },
                             enabled = sourcePage > 1,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("← Previous", fontSize = 12.sp)
+                            Icon(Icons.Rounded.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Previous", fontSize = 12.sp)
                         }
 
                         Spacer(Modifier.width(20.dp))
                         Text("Page $sourcePage", color = tokens.textPrimary, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(20.dp))
 
-                        Button(
+                        FilledTonalButton(
                             onClick = { sourcePage++ },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = tokens.surfaceContainerHigh, contentColor = tokens.textPrimary)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("Next →", fontSize = 12.sp)
+                            Text("Next", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -615,29 +670,57 @@ fun ExploreScreen(
 }
 
 @Composable
-private fun ExploreActionButton(
+private fun ModernExploreActionButton(
     title: String,
-    icon: String,
+    icon: ImageVector,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val tokens = LocalGlassTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.03f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val bg by animateColorAsState(
+        targetValue = if (hovered) tokens.surfaceContainerHigh else tokens.surfaceCard,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val border by animateColorAsState(
+        targetValue = if (hovered) tokens.borderGlow else tokens.borderGlass,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
     Surface(
-        color = tokens.surfaceContainer,
+        color = bg,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
-            .border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .border(1.dp, border, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
+            .hoverable(interaction)
             .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(icon, fontSize = 18.sp)
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = tokens.primary,
+                modifier = Modifier.size(20.dp)
+            )
             Spacer(Modifier.width(10.dp))
             Text(
-                title,
+                text = title,
                 color = tokens.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -649,32 +732,53 @@ private fun ExploreActionButton(
 }
 
 @Composable
-private fun KotatsuSourceFaviconItem(
+private fun ModernKotatsuSourceBadge(
     parser: MangaParserSource,
     onClick: () -> Unit,
 ) {
     val tokens = LocalGlassTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.06f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .width(88.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(14.dp))
+            .hoverable(interaction)
             .clickable(onClick = onClick)
             .padding(4.dp)
     ) {
         Surface(
-            color = tokens.surfaceContainerHigh,
+            color = if (hovered) tokens.primaryContainer else tokens.surfaceContainerHigh,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .size(72.dp)
-                .border(1.dp, tokens.outlineVariant, RoundedCornerShape(16.dp))
+                .border(
+                    width = if (hovered) 2.dp else 1.dp,
+                    color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .shadow(
+                    elevation = if (hovered) 8.dp else 2.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = tokens.primary
+                )
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = parser.title.take(2).uppercase(),
                     color = tokens.primary,
-                    fontSize = 20.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Black
                 )
             }
@@ -686,8 +790,13 @@ private fun KotatsuSourceFaviconItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Text("📌", fontSize = 9.sp)
-            Spacer(Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.Rounded.PushPin,
+                contentDescription = null,
+                tint = tokens.primary.copy(alpha = 0.8f),
+                modifier = Modifier.size(10.dp)
+            )
+            Spacer(Modifier.width(3.dp))
             Text(
                 text = parser.title,
                 color = tokens.textPrimary,
@@ -702,25 +811,46 @@ private fun KotatsuSourceFaviconItem(
 }
 
 @Composable
-private fun KotatsuMangaCard(
+fun ModernMangaCard(
     manga: Manga,
     onClick: () -> Unit,
 ) {
     val tokens = LocalGlassTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.04f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .hoverable(interaction)
             .clickable(onClick = onClick)
     ) {
         Surface(
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             color = tokens.surfaceContainerHigh,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(13f / 18f)
-                .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                .border(
+                    width = if (hovered) 1.5.dp else 1.dp,
+                    color = if (hovered) tokens.borderGlow else tokens.borderGlass,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .shadow(
+                    elevation = if (hovered) 10.dp else 2.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    spotColor = tokens.primary
+                )
         ) {
             RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
         }
@@ -729,11 +859,17 @@ private fun KotatsuMangaCard(
 
         Text(
             text = manga.title,
-            color = tokens.textPrimary,
+            color = if (hovered) tokens.primary else tokens.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+// Backward-compatible alias for KotatsuMangaCard
+@Composable
+fun KotatsuMangaCard(manga: Manga, onClick: () -> Unit) {
+    ModernMangaCard(manga, onClick)
 }

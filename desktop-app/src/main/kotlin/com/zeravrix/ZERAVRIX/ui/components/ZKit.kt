@@ -1,42 +1,33 @@
 package com.zeravrix.zeravrix.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -44,7 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 
-/** Rounded search field like Kotatsu's SearchBar. Enter calls [onSubmit]; the ✕ button clears the text. */
+/**
+ * Modern Cyber-Glass Search Field with Vector Icons & Instant Clear
+ */
 @Composable
 fun ZSearchBar(
     query: String,
@@ -54,25 +47,36 @@ fun ZSearchBar(
     onSubmit: () -> Unit = {},
 ) {
     val tokens = LocalGlassTokens.current
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(16.dp)
+
     Surface(
-        color = tokens.surfaceGlassRaised,
+        color = tokens.surfaceCard,
         shape = shape,
-        modifier = modifier.height(52.dp).border(1.dp, tokens.borderGlass, shape),
+        modifier = modifier
+            .height(48.dp)
+            .border(1.dp, tokens.borderGlass, shape)
+            .shadow(elevation = 4.dp, shape = shape, spotColor = tokens.primaryGlow),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("⌕", color = tokens.textMuted, fontSize = 20.sp)
+            Icon(
+                imageVector = Icons.Rounded.Search,
+                contentDescription = "Search",
+                tint = tokens.primary,
+                modifier = Modifier.size(20.dp)
+            )
             Spacer(Modifier.width(12.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (query.isEmpty()) Text(hint, color = tokens.textMuted, fontSize = 16.sp)
+                if (query.isEmpty()) {
+                    Text(hint, color = tokens.textMuted, fontSize = 14.sp)
+                }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    textStyle = TextStyle(color = tokens.textPrimary, fontSize = 16.sp),
+                    textStyle = TextStyle(color = tokens.textPrimary, fontSize = 14.sp),
                     cursorBrush = SolidColor(tokens.primary),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -87,51 +91,155 @@ fun ZSearchBar(
                 )
             }
             if (query.isNotEmpty()) {
-                Text(
-                    "✕",
-                    color = tokens.textMuted,
-                    fontSize = 16.sp,
-                    modifier = Modifier.clip(CircleShape).clickable { onQueryChange("") }.padding(8.dp),
-                )
+                Surface(
+                    color = tokens.surfaceContainerHigh,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable { onQueryChange("") }
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Clear",
+                            tint = tokens.textMuted,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-/** Outlined filter chip (selected = tinted). */
+/**
+ * Animated Glass Filter Chip with Vector Icon support & spring transitions
+ */
 @Composable
-fun ZChip(label: String, selected: Boolean, onClick: () -> Unit, icon: String? = null) {
+fun ZChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector? = null,
+) {
     val tokens = LocalGlassTokens.current
     val shape = RoundedCornerShape(10.dp)
-    Row(
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val bg by animateColorAsState(
+        targetValue = when {
+            selected -> tokens.primaryContainer
+            hovered -> tokens.surfaceContainerHigh
+            else -> tokens.surfaceCard
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            selected -> tokens.primary
+            hovered -> tokens.borderGlow
+            else -> tokens.borderGlass
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val textColor by animateColorAsState(
+        targetValue = if (selected) tokens.primary else if (hovered) tokens.textPrimary else tokens.textMuted,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.03f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    Surface(
+        color = bg,
+        shape = shape,
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .border(1.dp, borderColor, shape)
             .clip(shape)
-            .background(if (selected) tokens.primary.copy(alpha = 0.22f) else Color.Transparent)
-            .border(1.dp, if (selected) tokens.primary else tokens.borderGlass, shape)
+            .hoverable(interaction)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) {
-            Text(icon, fontSize = 14.sp, color = if (selected) tokens.primary else tokens.textMuted)
-            Spacer(Modifier.width(8.dp))
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = textColor
+            )
         }
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (selected) tokens.textPrimary else tokens.textMuted)
     }
 }
 
-/** Round reading-progress badge shown on a cover: "37%" or a check mark when finished. */
+/**
+ * Backward compatibility overload for String emoji icons
+ */
+@Composable
+fun ZChip(label: String, selected: Boolean, onClick: () -> Unit, icon: String?) {
+    val vectorIcon = when (icon) {
+        "✦", "⭐" -> Icons.Rounded.AutoAwesome
+        "🔞" -> Icons.Rounded.Explicit
+        "✎" -> Icons.Rounded.Edit
+        "▣" -> Icons.Rounded.Devices
+        "▶" -> Icons.Rounded.PlayArrow
+        "✓" -> Icons.Rounded.Check
+        "♡" -> Icons.Rounded.Favorite
+        "⊘" -> Icons.Rounded.Block
+        else -> null
+    }
+    ZChip(label = label, selected = selected, onClick = onClick, icon = vectorIcon)
+}
+
+/**
+ * Elegant circular reading-progress badge
+ */
 @Composable
 fun ProgressBadge(percent: Int, modifier: Modifier = Modifier) {
     val tokens = LocalGlassTokens.current
-    Box(
-        modifier = modifier.size(34.dp).clip(CircleShape).background(tokens.primary.copy(alpha = 0.88f)),
-        contentAlignment = Alignment.Center,
+    Surface(
+        color = tokens.primary,
+        shape = CircleShape,
+        modifier = modifier
+            .size(32.dp)
+            .shadow(elevation = 4.dp, shape = CircleShape)
     ) {
-        if (percent >= 100) {
-            Text("✓", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-        } else {
-            Text("$percent%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+        Box(contentAlignment = Alignment.Center) {
+            if (percent >= 100) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Finished",
+                    tint = tokens.onPrimary,
+                    modifier = Modifier.size(16.dp)
+                )
+            } else {
+                Text(
+                    text = "$percent%",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = tokens.onPrimary
+                )
+            }
         }
     }
 }
@@ -140,15 +248,17 @@ fun ProgressBadge(percent: Int, modifier: Modifier = Modifier) {
 fun SectionHeader(text: String) {
     val tokens = LocalGlassTokens.current
     Text(
-        text,
+        text = text,
         color = tokens.textPrimary,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp),
     )
 }
 
-/** Left pane = half the window up to [leftMaxWidth] (Kotatsu details/settings: 50 % max 420 dp); right pane takes the rest. */
+/**
+ * Left pane = responsive split up to [leftMaxWidth] (Kotatsu details/settings: 50% max 420dp)
+ */
 @Composable
 fun ZTwoPane(
     modifier: Modifier = Modifier,
@@ -166,7 +276,9 @@ fun ZTwoPane(
     }
 }
 
-/** Primary pill button with a drop-down arrow (Kotatsu's "Continue ▾"). [menu] receives a function that closes the menu. */
+/**
+ * Primary action button with split drop-down menu
+ */
 @Composable
 fun ZSplitButton(
     label: String,
@@ -175,28 +287,59 @@ fun ZSplitButton(
 ) {
     val tokens = LocalGlassTokens.current
     var open by remember { mutableStateOf(false) }
-    val onPrimary = MaterialTheme.colorScheme.onPrimary
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 6.dp, bottomEnd = 6.dp))
-                .background(tokens.primary)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 24.dp, vertical = 14.dp),
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            color = tokens.primary,
+            shape = RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp, topEnd = 6.dp, bottomEnd = 6.dp),
+            modifier = Modifier.clickable(onClick = onClick)
         ) {
-            Text(label, color = onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        }
-        Box {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 24.dp, bottomEnd = 24.dp))
-                    .background(tokens.primary)
-                    .clickable { open = true }
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
+            Row(
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("▾", color = onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Icon(
+                    imageVector = Icons.Rounded.PlayArrow,
+                    contentDescription = null,
+                    tint = tokens.onPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = label,
+                    color = tokens.onPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        }
+
+        Box {
+            Surface(
+                color = tokens.primary,
+                shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 20.dp, bottomEnd = 20.dp),
+                modifier = Modifier.clickable { open = true }
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowDropDown,
+                        contentDescription = "Options",
+                        tint = tokens.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            DropdownMenu(
+                expanded = open,
+                onDismissRequest = { open = false }
+            ) {
                 menu { open = false }
             }
         }

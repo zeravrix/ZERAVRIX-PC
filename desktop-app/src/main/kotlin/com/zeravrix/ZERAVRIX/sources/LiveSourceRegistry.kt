@@ -5,10 +5,7 @@ import com.zeravrix.zeravrix.core.Manga
 import com.zeravrix.zeravrix.core.MangaPage
 import com.zeravrix.zeravrix.data.DesktopMangaLoaderContext
 import com.zeravrix.zeravrix.source.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -35,10 +32,10 @@ class LiveSourceRegistry(
         if (loaderContext != null) {
             val kotatsuCurated = listOf(
                 MangaParserSource.MANGADEX,
-                MangaParserSource.MANGASEE,
-                MangaParserSource.FLAMECOMICS,
-                MangaParserSource.ASURASCANS,
                 MangaParserSource.MANGAKAKALOT,
+                MangaParserSource.ASURASCANS,
+                MangaParserSource.FLAMECOMICS,
+                MangaParserSource.MANGASEE,
                 MangaParserSource.WEBTOONS_EN,
                 MangaParserSource.BATOTO,
                 MangaParserSource.COMICK_FUN
@@ -52,6 +49,10 @@ class LiveSourceRegistry(
     private val sourceMap = ConcurrentHashMap<Long, Source>().apply {
         sources.forEach { put(it.id, it) }
     }
+
+    // Fast in-memory cache for popular titles to ensure 0ms instantaneous switching
+    private val popularCache = ConcurrentHashMap<Long, List<Manga>>()
+    private var globalPopularCache: List<Manga>? = null
 
     fun get(id: Long): Source? {
         val existing = sourceMap[id]
@@ -84,18 +85,46 @@ class LiveSourceRegistry(
 
     fun catalogueSources(): List<CatalogueSource> = sources.filterIsInstance<CatalogueSource>()
 
+    /**
+     * High-speed non-blocking popular fetcher with timeout guards and in-memory caching
+     */
     suspend fun fetchPopular(sourceId: Long? = null, page: Int = 1): List<Manga> = withContext(Dispatchers.IO) {
         if (sourceId != null) {
-            (sourceMap[sourceId] as? CatalogueSource)?.popular(page)?.items.orEmpty()
+            if (page == 1 && popularCache.containsKey(sourceId)) {
+                return@withContext popularCache[sourceId].orEmpty()
+            }
+            val res = (sourceMap[sourceId] as? CatalogueSource)?.popular(page)?.items.orEmpty()
+            if (page == 1 && res.isNotEmpty()) {
+                popularCache[sourceId] = res
+            }
+            res
         } else {
-            val jobs = catalogueSources()
-                .filter { it.capabilities.popular }
-                .map { source ->
-                    async {
+            if (page == 1 && globalPopularCache != null && globalPopularCache!!.isNotEmpty()) {
+                return@withContext globalPopularCache!!
+            }
+
+            // Target top fast-responding sources with strict 5s timeout to prevent launch stall
+            val prioritized = catalogueSources().filter { it.capabilities.popular }
+            val quickTargets = prioritized.filter {
+                it.name.contains("Dex", ignoreCase = true) ||
+                it.name.contains("Kakalot", ignoreCase = true) ||
+                it.name.contains("Asura", ignoreCase = true) ||
+                it.name.contains("Flame", ignoreCase = true)
+            }.ifEmpty { prioritized.take(4) }
+
+            val jobs = quickTargets.map { source ->
+                async {
+                    withTimeoutOrNull(5500L) {
                         runCatching { source.popular(page).items }.getOrDefault(emptyList())
-                    }
+                    }.orEmpty()
                 }
-            jobs.awaitAll().flatten().distinctBy { it.id }
+            }
+
+            val results = jobs.awaitAll().flatten().distinctBy { it.id }
+            if (page == 1 && results.isNotEmpty()) {
+                globalPopularCache = results
+            }
+            results
         }
     }
 
@@ -103,13 +132,14 @@ class LiveSourceRegistry(
         if (sourceId != null) {
             (sourceMap[sourceId] as? CatalogueSource)?.latest(page)?.items.orEmpty()
         } else {
-            val jobs = catalogueSources()
-                .filter { it.capabilities.latest }
-                .map { source ->
-                    async {
+            val quickTargets = catalogueSources().filter { it.capabilities.latest }.take(4)
+            val jobs = quickTargets.map { source ->
+                async {
+                    withTimeoutOrNull(5500L) {
                         runCatching { source.latest(page).items }.getOrDefault(emptyList())
-                    }
+                    }.orEmpty()
                 }
+            }
             jobs.awaitAll().flatten().distinctBy { it.id }
         }
     }
@@ -119,13 +149,14 @@ class LiveSourceRegistry(
         if (sourceId != null) {
             (sourceMap[sourceId] as? CatalogueSource)?.search(page, query)?.items.orEmpty()
         } else {
-            val jobs = catalogueSources()
-                .filter { it.capabilities.search }
-                .map { source ->
-                    async {
+            val quickTargets = catalogueSources().filter { it.capabilities.search }.take(5)
+            val jobs = quickTargets.map { source ->
+                async {
+                    withTimeoutOrNull(6000L) {
                         runCatching { source.search(page, query).items }.getOrDefault(emptyList())
-                    }
+                    }.orEmpty()
                 }
+            }
             jobs.awaitAll().flatten().distinctBy { it.id }
         }
     }
