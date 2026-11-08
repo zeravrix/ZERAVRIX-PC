@@ -37,7 +37,8 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
+import java.util.LinkedHashMap
 import java.util.concurrent.TimeUnit
 
 private val coverCacheDir: Path by lazy {
@@ -49,14 +50,22 @@ private val coverCacheDir: Path by lazy {
 private val okHttpClient: OkHttpClient by lazy {
     val httpCache = coverCacheDir.resolve("http").toFile()
     OkHttpClient.Builder()
-        .cache(Cache(httpCache, 256L * 1024L * 1024L)) // 256 MB cache
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .cache(Cache(httpCache, 512L * 1024L * 1024L)) // 512 MB HTTP disk cache
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 }
 
-private val memoryCache = ConcurrentHashMap<String, ImageBitmap>()
+// True LRU Memory Cache to eliminate frame drops and sudden cache wipes during reading
+private const val MAX_MEMORY_ENTRIES = 350
+private val memoryCache: MutableMap<String, ImageBitmap> = Collections.synchronizedMap(
+    object : LinkedHashMap<String, ImageBitmap>(128, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ImageBitmap>?): Boolean {
+            return size > MAX_MEMORY_ENTRIES
+        }
+    }
+)
 
 private fun hashUrl(url: String): String {
     val md = MessageDigest.getInstance("SHA-256")
@@ -147,9 +156,6 @@ fun RemoteCoverImage(
                 if (bytes != null && bytes.isNotEmpty()) {
                     val skia = SkiaImage.makeFromEncoded(bytes)
                     val composeBmp = skia.toComposeImageBitmap()
-                    if (memoryCache.size > 300) {
-                        memoryCache.clear()
-                    }
                     memoryCache[url] = composeBmp
                     imageBitmap = composeBmp
                     hasError = false

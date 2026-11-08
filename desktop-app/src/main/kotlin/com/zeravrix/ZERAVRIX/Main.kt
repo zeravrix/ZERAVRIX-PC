@@ -69,6 +69,7 @@ import java.util.*
 private data class ActiveReaderSession(
     val manga: Manga,
     val chapter: Chapter,
+    val allChapters: List<Chapter> = emptyList(),
     val pages: List<MangaPage>,
     val initialPage: Int = 0,
 )
@@ -198,22 +199,43 @@ fun main() = application {
         }
     }
 
-    // Helper: Open chapter with CBZ detection
-    fun openChapter(manga: Manga, chapter: Chapter, startPage: Int) {
+    fun sortChaptersForReading(chapters: List<Chapter>): List<Chapter> {
+        if (chapters.size <= 1) return chapters
+        val hasNumbers = chapters.any { (it.number ?: 0f) > 0f }
+        return if (hasNumbers) {
+            chapters.sortedWith(compareBy({ it.number ?: 999999f }, { it.uploadDate ?: 0L }))
+        } else {
+            val firstDate = chapters.first().uploadDate ?: 0L
+            val lastDate = chapters.last().uploadDate ?: 0L
+            if (firstDate > lastDate) chapters.reversed() else chapters
+        }
+    }
+
+    // Helper: Open chapter with continuous multi-chapter reading
+    fun openChapter(manga: Manga, chapter: Chapter, startPage: Int, existingChapters: List<Chapter>? = null) {
         scope.launch {
             withContext(Dispatchers.IO) {
                 libraryStore.recordHistory(manga)
             }
-            val downloaded = downloader.downloadedChapters(manga.id).firstOrNull { it.chapterId == chapter.id }
-            val pages = if (downloaded != null) {
-                downloader.localPages(downloaded)
+            val chapters = if (!existingChapters.isNullOrEmpty()) {
+                sortChaptersForReading(existingChapters)
             } else {
-                sourceRegistry.fetchPages(chapter)
+                val fetched = withContext(Dispatchers.IO) { sourceRegistry.fetchChapters(manga) }
+                sortChaptersForReading(fetched)
+            }
+            val downloaded = downloader.downloadedChapters(manga.id).firstOrNull { it.chapterId == chapter.id }
+            val pages = withContext(Dispatchers.IO) {
+                if (downloaded != null) {
+                    downloader.localPages(downloaded)
+                } else {
+                    sourceRegistry.fetchPages(chapter)
+                }
             }
             if (pages.isNotEmpty()) {
                 activeReader = ActiveReaderSession(
                     manga = manga,
                     chapter = chapter,
+                    allChapters = chapters,
                     pages = pages,
                     initialPage = startPage.coerceIn(0, pages.lastIndex)
                 )
@@ -236,7 +258,7 @@ fun main() = application {
                 val targetChapter = chapters.firstOrNull { it.id == progress.chapterId } ?: chapters.firstOrNull()
                 if (targetChapter != null) {
                     val safePage = progress.pageIndex.coerceAtLeast(0)
-                    openChapter(manga, targetChapter, safePage)
+                    openChapter(manga, targetChapter, safePage, chapters)
                 }
             }
         }
@@ -301,21 +323,30 @@ fun main() = application {
                             val session = activeReader!!
                             DesktopReaderView(
                                 mangaTitle = session.manga.title,
-                                chapterTitle = session.chapter.title,
-                                pages = session.pages,
+                                initialChapter = session.chapter,
+                                allChapters = session.allChapters,
+                                initialPages = session.pages,
                                 initialPage = session.initialPage,
                                 initialMode = settings.readerMode,
+                                onFetchPages = { ch ->
+                                    val downloaded = downloader.downloadedChapters(session.manga.id).firstOrNull { it.chapterId == ch.id }
+                                    if (downloaded != null) {
+                                        downloader.localPages(downloaded)
+                                    } else {
+                                        sourceRegistry.fetchPages(ch)
+                                    }
+                                },
                                 onClose = {
                                     activeReader = null
                                     shelfRefresh++
                                 },
-                                onPageChanged = { pageIndex ->
+                                onPageChanged = { ch, pageIndex ->
                                     libraryStore.saveProgress(
                                         ReadingProgress(
                                             mangaId = session.manga.id,
-                                            chapterId = session.chapter.id,
+                                            chapterId = ch.id,
                                             pageIndex = pageIndex,
-                                            chapterNumber = session.chapter.number,
+                                            chapterNumber = ch.number,
                                             updatedAt = System.currentTimeMillis()
                                         )
                                     )

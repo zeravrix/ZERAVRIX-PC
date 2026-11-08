@@ -36,11 +36,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
+import com.zeravrix.zeravrix.core.Chapter
 import com.zeravrix.zeravrix.core.MangaPage
 import com.zeravrix.zeravrix.core.ReaderModePreference
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import com.zeravrix.zeravrix.ui.screens.RemoteCoverImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class ReaderDirection {
     LEFT_TO_RIGHT,
@@ -54,16 +58,29 @@ enum class ReaderBgColor(val label: String, val color: Color, val textColor: Col
     LIGHT("Light", Color(0xFFF8F9FA), Color(0xFF1A1A1A))
 }
 
+data class LoadedChapter(
+    val chapter: Chapter,
+    val pages: List<MangaPage>
+)
+
+sealed interface ContinuousReaderItem {
+    data class ChapterDivider(val chapter: Chapter, val chapterIndex: Int, val totalChapters: Int) : ContinuousReaderItem
+    data class Page(val chapter: Chapter, val page: MangaPage, val pageIndex: Int, val totalPages: Int) : ContinuousReaderItem
+    data class EndOfManga(val mangaTitle: String) : ContinuousReaderItem
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DesktopReaderView(
     mangaTitle: String,
-    chapterTitle: String,
-    pages: List<MangaPage>,
+    initialChapter: Chapter,
+    allChapters: List<Chapter> = emptyList(),
+    initialPages: List<MangaPage>,
     initialPage: Int = 0,
     initialMode: ReaderModePreference = ReaderModePreference.VERTICAL,
+    onFetchPages: suspend (Chapter) -> List<MangaPage> = { emptyList() },
     onClose: () -> Unit,
-    onPageChanged: (Int) -> Unit = {},
+    onPageChanged: (chapter: Chapter, pageIndex: Int) -> Unit = { _, _ -> },
 ) {
     val tokens = LocalGlassTokens.current
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialPage)
@@ -71,7 +88,6 @@ fun DesktopReaderView(
     val scope = rememberCoroutineScope()
 
     var mode by remember { mutableStateOf(initialMode) }
-    var singlePageIndex by remember { mutableIntStateOf(initialPage) }
     var showControls by remember { mutableStateOf(true) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
@@ -80,13 +96,136 @@ fun DesktopReaderView(
     var fitWidth by remember { mutableStateOf(true) }
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
 
+    // Multi-chapter continuous loading state
+    val loadedChapters = remember { mutableStateListOf(LoadedChapter(initialChapter, initialPages)) }
+    var isLoadingNextChapter by remember { mutableStateOf(false) }
+
+    var currentActiveChapter by remember { mutableStateOf(initialChapter) }
+    var currentPageInChapter by remember { mutableIntStateOf(initialPage) }
+    var totalPagesInCurrentChapter by remember { mutableIntStateOf(initialPages.size) }
+
+    // Single Page / Double Page state
+    var currentSingleChapterIndex by remember {
+        mutableIntStateOf(allChapters.indexOfFirst { it.id == initialChapter.id }.coerceAtLeast(0))
+    }
+    var currentSinglePages by remember { mutableStateOf(initialPages) }
+    var singlePageIndex by remember { mutableIntStateOf(initialPage) }
+
+    val feedItems by remember {
+        derivedStateOf {
+            val items = mutableListOf<ContinuousReaderItem>()
+            val totalChapters = allChapters.size.coerceAtLeast(1)
+            loadedChapters.forEachIndexed { chapIdx, loaded ->
+                if (chapIdx > 0) {
+                    val realIdx = allChapters.indexOfFirst { it.id == loaded.chapter.id }
+                    items.add(
+                        ContinuousReaderItem.ChapterDivider(
+                            chapter = loaded.chapter,
+                            chapterIndex = (if (realIdx >= 0) realIdx else chapIdx) + 1,
+                            totalChapters = totalChapters
+                        )
+                    )
+                }
+                loaded.pages.forEachIndexed { pIdx, p ->
+                    items.add(ContinuousReaderItem.Page(loaded.chapter, p, pIdx, loaded.pages.size))
+                }
+            }
+            val lastLoaded = loadedChapters.lastOrNull()?.chapter
+            val lastIndex = if (lastLoaded != null) allChapters.indexOfFirst { it.id == lastLoaded.id } else -1
+            if (allChapters.isNotEmpty() && lastIndex != -1 && lastIndex >= allChapters.size - 1) {
+                items.add(ContinuousReaderItem.EndOfManga(mangaTitle))
+            }
+            items
+        }
+    }
+
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
+    // Infinite Chapter Scroll trigger for Vertical (Webtoon) mode
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val total = listState.layoutInfo.totalItemsCount
+            val lastIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastIdx to total
+        }.collect { (lastIdx, total) ->
+            if (total > 0 && lastIdx >= total - 4 && !isLoadingNextChapter && allChapters.isNotEmpty()) {
+                val lastLoaded = loadedChapters.lastOrNull()?.chapter ?: return@collect
+                val curIdx = allChapters.indexOfFirst { it.id == lastLoaded.id }
+                if (curIdx != -1 && curIdx + 1 < allChapters.size) {
+                    val nextChapter = allChapters[curIdx + 1]
+                    isLoadingNextChapter = true
+                    scope.launch {
+                        val nextPages = withContext(Dispatchers.IO) { onFetchPages(nextChapter) }
+                        if (nextPages.isNotEmpty()) {
+                            loadedChapters.add(LoadedChapter(nextChapter, nextPages))
+                        }
+                        isLoadingNextChapter = false
+                    }
+                }
+            }
+        }
+    }
+
+    // Active Chapter & Reading Progress Tracking
     LaunchedEffect(listState.firstVisibleItemIndex) {
         if (mode == ReaderModePreference.VERTICAL) {
-            onPageChanged(listState.firstVisibleItemIndex)
+            val item = feedItems.getOrNull(listState.firstVisibleItemIndex)
+            if (item is ContinuousReaderItem.Page) {
+                currentActiveChapter = item.chapter
+                currentPageInChapter = item.pageIndex
+                totalPagesInCurrentChapter = item.totalPages
+                onPageChanged(item.chapter, item.pageIndex)
+            }
+        }
+    }
+
+    fun advanceSinglePage() {
+        if (singlePageIndex < currentSinglePages.lastIndex) {
+            singlePageIndex++
+            currentPageInChapter = singlePageIndex
+            onPageChanged(currentActiveChapter, singlePageIndex)
+        } else if (allChapters.isNotEmpty() && currentSingleChapterIndex + 1 < allChapters.size && !isLoadingNextChapter) {
+            val nextChap = allChapters[currentSingleChapterIndex + 1]
+            isLoadingNextChapter = true
+            scope.launch {
+                val pages = withContext(Dispatchers.IO) { onFetchPages(nextChap) }
+                if (pages.isNotEmpty()) {
+                    currentSingleChapterIndex++
+                    currentSinglePages = pages
+                    singlePageIndex = 0
+                    currentActiveChapter = nextChap
+                    currentPageInChapter = 0
+                    totalPagesInCurrentChapter = pages.size
+                    onPageChanged(nextChap, 0)
+                }
+                isLoadingNextChapter = false
+            }
+        }
+    }
+
+    fun previousSinglePage() {
+        if (singlePageIndex > 0) {
+            singlePageIndex--
+            currentPageInChapter = singlePageIndex
+            onPageChanged(currentActiveChapter, singlePageIndex)
+        } else if (currentSingleChapterIndex > 0 && !isLoadingNextChapter) {
+            val prevChap = allChapters[currentSingleChapterIndex - 1]
+            isLoadingNextChapter = true
+            scope.launch {
+                val pages = withContext(Dispatchers.IO) { onFetchPages(prevChap) }
+                if (pages.isNotEmpty()) {
+                    currentSingleChapterIndex--
+                    currentSinglePages = pages
+                    singlePageIndex = pages.lastIndex
+                    currentActiveChapter = prevChap
+                    currentPageInChapter = pages.lastIndex
+                    totalPagesInCurrentChapter = pages.size
+                    onPageChanged(prevChap, pages.lastIndex)
+                }
+                isLoadingNextChapter = false
+            }
         }
     }
 
@@ -115,20 +254,10 @@ fun DesktopReaderView(
                             if (mode == ReaderModePreference.VERTICAL) {
                                 scope.launch {
                                     val current = listState.firstVisibleItemIndex
-                                    listState.animateScrollToItem((current + 1).coerceAtMost(pages.lastIndex))
+                                    listState.animateScrollToItem((current + 1).coerceAtMost(feedItems.lastIndex.coerceAtLeast(0)))
                                 }
                             } else {
-                                if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) {
-                                    if (singlePageIndex < pages.lastIndex) {
-                                        singlePageIndex++
-                                        onPageChanged(singlePageIndex)
-                                    }
-                                } else {
-                                    if (singlePageIndex > 0) {
-                                        singlePageIndex--
-                                        onPageChanged(singlePageIndex)
-                                    }
-                                }
+                                if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) advanceSinglePage() else previousSinglePage()
                             }
                             true
                         }
@@ -139,46 +268,16 @@ fun DesktopReaderView(
                                     listState.animateScrollToItem((current - 1).coerceAtLeast(0))
                                 }
                             } else {
-                                if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) {
-                                    if (singlePageIndex > 0) {
-                                        singlePageIndex--
-                                        onPageChanged(singlePageIndex)
-                                    }
-                                } else {
-                                    if (singlePageIndex < pages.lastIndex) {
-                                        singlePageIndex++
-                                        onPageChanged(singlePageIndex)
-                                    }
-                                }
+                                if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) previousSinglePage() else advanceSinglePage()
                             }
                             true
                         }
                         Key.DirectionRight, Key.D -> {
-                            if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) {
-                                if (singlePageIndex < pages.lastIndex) {
-                                    singlePageIndex++
-                                    onPageChanged(singlePageIndex)
-                                }
-                            } else {
-                                if (singlePageIndex > 0) {
-                                    singlePageIndex--
-                                    onPageChanged(singlePageIndex)
-                                }
-                            }
+                            if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) advanceSinglePage() else previousSinglePage()
                             true
                         }
                         Key.DirectionLeft, Key.A -> {
-                            if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) {
-                                if (singlePageIndex > 0) {
-                                    singlePageIndex--
-                                    onPageChanged(singlePageIndex)
-                                }
-                            } else {
-                                if (singlePageIndex < pages.lastIndex) {
-                                    singlePageIndex++
-                                    onPageChanged(singlePageIndex)
-                                }
-                            }
+                            if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) previousSinglePage() else advanceSinglePage()
                             true
                         }
                         Key.Plus, Key.Equals, Key.NumPadAdd -> {
@@ -235,27 +334,129 @@ fun DesktopReaderView(
                             .fillMaxWidth(widthFraction),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        itemsIndexed(pages, key = { _, page -> "${page.index}_${page.imageUrl}" }) { _, page ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                RemoteCoverImage(
-                                    url = page.imageUrl,
-                                    contentScale = ContentScale.FillWidth,
+                        itemsIndexed(
+                            items = feedItems,
+                            key = { _, item ->
+                                when (item) {
+                                    is ContinuousReaderItem.ChapterDivider -> "ch_divider_${item.chapter.id}"
+                                    is ContinuousReaderItem.Page -> "p_${item.chapter.id}_${item.page.index}_${item.page.imageUrl}"
+                                    is ContinuousReaderItem.EndOfManga -> "end_of_manga"
+                                }
+                            }
+                        ) { _, item ->
+                            when (item) {
+                                is ContinuousReaderItem.ChapterDivider -> {
+                                    Surface(
+                                        color = tokens.surfaceContainerHigh.copy(alpha = 0.85f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, tokens.primary.copy(alpha = 0.35f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 28.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(
+                                                "CHAPTER ${item.chapterIndex} OF ${item.totalChapters}",
+                                                color = tokens.primary,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                letterSpacing = 1.2.sp
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                item.chapter.title,
+                                                color = tokens.textPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                                is ContinuousReaderItem.Page -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .wrapContentHeight(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        RemoteCoverImage(
+                                            url = item.page.imageUrl,
+                                            contentScale = ContentScale.FillWidth,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .wrapContentHeight()
+                                        )
+                                    }
+                                }
+                                is ContinuousReaderItem.EndOfManga -> {
+                                    Surface(
+                                        color = tokens.surfaceContainerHigh.copy(alpha = 0.9f),
+                                        shape = RoundedCornerShape(16.dp),
+                                        border = BorderStroke(1.dp, tokens.borderGlass),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 32.dp, vertical = 40.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(24.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.CheckCircle,
+                                                contentDescription = null,
+                                                tint = tokens.primary,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                            Spacer(Modifier.height(10.dp))
+                                            Text(
+                                                "You're all caught up!",
+                                                color = tokens.textPrimary,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "You've reached the latest page of the latest chapter.",
+                                                color = tokens.textMuted,
+                                                fontSize = 12.sp
+                                            )
+                                            Spacer(Modifier.height(16.dp))
+                                            FilledTonalButton(
+                                                onClick = onClose,
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("Close Reader", fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isLoadingNextChapter) {
+                            item(key = "loading_indicator") {
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .wrapContentHeight()
-                                )
+                                        .padding(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        color = tokens.primary,
+                                        strokeWidth = 3.dp
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
                 ReaderModePreference.SINGLE -> {
-                    val currentPage = pages.getOrNull(singlePageIndex)
+                    val currentPage = currentSinglePages.getOrNull(singlePageIndex)
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         if (currentPage != null) {
                             RemoteCoverImage(
@@ -273,8 +474,8 @@ fun DesktopReaderView(
                     val idx1 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex else singlePageIndex + 1
                     val idx2 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex + 1 else singlePageIndex
 
-                    val page1 = pages.getOrNull(idx1)
-                    val page2 = pages.getOrNull(idx2)
+                    val page1 = currentSinglePages.getOrNull(idx1)
+                    val page2 = currentSinglePages.getOrNull(idx2)
 
                     Row(
                         Modifier
@@ -343,7 +544,7 @@ fun DesktopReaderView(
                             maxLines = 1
                         )
                         Text(
-                            chapterTitle,
+                            currentActiveChapter.title,
                             color = tokens.primary,
                             fontWeight = FontWeight.Medium,
                             fontSize = 12.sp,
@@ -448,8 +649,13 @@ fun DesktopReaderView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    val pageText = if (mode == ReaderModePreference.VERTICAL) {
+                        "Page ${currentPageInChapter + 1} of $totalPagesInCurrentChapter"
+                    } else {
+                        "Page ${singlePageIndex + 1} of ${currentSinglePages.size}"
+                    }
                     Text(
-                        "Page $currentPageNumber of ${pages.size}",
+                        pageText,
                         color = tokens.textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
