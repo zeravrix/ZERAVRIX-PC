@@ -178,15 +178,19 @@ fun SettingsScreen(
                             ) {
                                 row.forEach { theme ->
                                     val isSelected = when (theme) {
-                                        KotatsuTheme.TOTORO -> settings.colorTheme == ColorTheme.INDIGO_NIGHT && !settings.isAmoled
-                                        KotatsuTheme.MIKU -> settings.colorTheme == ColorTheme.OCEAN
-                                        KotatsuTheme.ASUKA -> settings.colorTheme == ColorTheme.CRIMSON
-                                        KotatsuTheme.MION -> settings.colorTheme == ColorTheme.MATCHA
-                                        KotatsuTheme.RIKKA -> settings.colorTheme == ColorTheme.LAVENDER
+                                        KotatsuTheme.TOTORO -> settings.colorTheme == ColorTheme.TOTORO
+                                        KotatsuTheme.MONET -> settings.colorTheme == ColorTheme.MONET
+                                        KotatsuTheme.EXPRESSIVE -> settings.colorTheme == ColorTheme.EXPRESSIVE
+                                        KotatsuTheme.MIKU -> settings.colorTheme == ColorTheme.MIKU
+                                        KotatsuTheme.ASUKA -> settings.colorTheme == ColorTheme.ASUKA
+                                        KotatsuTheme.MION -> settings.colorTheme == ColorTheme.MION
+                                        KotatsuTheme.RIKKA -> settings.colorTheme == ColorTheme.RIKKA
                                         KotatsuTheme.SAKURA -> settings.colorTheme == ColorTheme.SAKURA
-                                        KotatsuTheme.MAMIMI -> settings.colorTheme == ColorTheme.INDIGO_NIGHT
-                                        KotatsuTheme.KANADE -> settings.colorTheme == ColorTheme.GRAPHITE
-                                        KotatsuTheme.ITSUKA -> settings.colorTheme == ColorTheme.EMBER
+                                        KotatsuTheme.MAMIMI -> settings.colorTheme == ColorTheme.MAMIMI
+                                        KotatsuTheme.KANADE -> settings.colorTheme == ColorTheme.KANADE
+                                        KotatsuTheme.ITSUKA -> settings.colorTheme == ColorTheme.ITSUKA
+                                        KotatsuTheme.AMOLED_VOID -> settings.colorTheme == ColorTheme.AMOLED_VOID
+                                        KotatsuTheme.HIGH_CONTRAST -> settings.colorTheme == ColorTheme.HIGH_CONTRAST
                                     }
 
                                     Surface(
@@ -207,17 +211,21 @@ fun SettingsScreen(
                                             .clip(RoundedCornerShape(12.dp))
                                             .clickable {
                                                 val mappedColor = when (theme) {
-                                                    KotatsuTheme.TOTORO -> ColorTheme.INDIGO_NIGHT
-                                                    KotatsuTheme.MIKU -> ColorTheme.OCEAN
-                                                    KotatsuTheme.ASUKA -> ColorTheme.CRIMSON
-                                                    KotatsuTheme.MION -> ColorTheme.MATCHA
-                                                    KotatsuTheme.RIKKA -> ColorTheme.LAVENDER
+                                                    KotatsuTheme.TOTORO -> ColorTheme.TOTORO
+                                                    KotatsuTheme.MONET -> ColorTheme.MONET
+                                                    KotatsuTheme.EXPRESSIVE -> ColorTheme.EXPRESSIVE
+                                                    KotatsuTheme.MIKU -> ColorTheme.MIKU
+                                                    KotatsuTheme.ASUKA -> ColorTheme.ASUKA
+                                                    KotatsuTheme.MION -> ColorTheme.MION
+                                                    KotatsuTheme.RIKKA -> ColorTheme.RIKKA
                                                     KotatsuTheme.SAKURA -> ColorTheme.SAKURA
-                                                    KotatsuTheme.MAMIMI -> ColorTheme.INDIGO_NIGHT
-                                                    KotatsuTheme.KANADE -> ColorTheme.GRAPHITE
-                                                    KotatsuTheme.ITSUKA -> ColorTheme.EMBER
+                                                    KotatsuTheme.MAMIMI -> ColorTheme.MAMIMI
+                                                    KotatsuTheme.KANADE -> ColorTheme.KANADE
+                                                    KotatsuTheme.ITSUKA -> ColorTheme.ITSUKA
+                                                    KotatsuTheme.AMOLED_VOID -> ColorTheme.AMOLED_VOID
+                                                    KotatsuTheme.HIGH_CONTRAST -> ColorTheme.HIGH_CONTRAST
                                                 }
-                                                onSettingsChange(settings.copy(colorTheme = mappedColor, isAmoled = false))
+                                                onSettingsChange(settings.copy(colorTheme = mappedColor, isAmoled = (theme == KotatsuTheme.AMOLED_VOID)))
                                             }
                                     ) {
                                         Row(

@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -149,7 +150,11 @@ fun ExploreScreen(
                 val cat = selectedCategory.lowercase()
                 manga.genres.any { it.lowercase().contains(cat) } ||
                     manga.title.lowercase().contains(cat) ||
-                    manga.description.lowercase().contains(cat)
+                    manga.description.lowercase().contains(cat) ||
+                    (cat == "manhwa" && manga.genres.any {
+                        val g = it.lowercase()
+                        g.contains("webtoon") || g.contains("long strip") || g.contains("full color") || g.contains("manhwa")
+                    })
             }
             val matchesNsfw = if (!filterNsfw) true else {
                 manga.genres.any { g ->
@@ -182,41 +187,55 @@ fun ExploreScreen(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 )
 
-                // Kotatsu 4 Action Buttons Row with Modern Vector Icons & Hover Physics
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // 2x2 Action Cards Grid (Professional layout)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ModernExploreActionButton(
-                        title = "Local storage",
-                        icon = Icons.Rounded.Folder,
-                        modifier = Modifier.weight(1f),
-                        onClick = onNavigateLocal
-                    )
-                    ModernExploreActionButton(
-                        title = "Bookmarks",
-                        icon = Icons.Rounded.Bookmark,
-                        modifier = Modifier.weight(1f),
-                        onClick = onNavigateBookmarks
-                    )
-                    ModernExploreActionButton(
-                        title = "Random manga",
-                        icon = Icons.Rounded.Casino,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            scope.launch {
-                                val popular = sourceRegistry.fetchPopular()
-                                val random = popular.randomOrNull()
-                                if (random != null) onOpenManga(random)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ModernExploreActionButton(
+                            title = "Local Storage",
+                            subtitle = "Browse CBZ & offline archives",
+                            icon = Icons.Rounded.Folder,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateLocal
+                        )
+                        ModernExploreActionButton(
+                            title = "Bookmarks",
+                            subtitle = "Saved favorite titles",
+                            icon = Icons.Rounded.Bookmark,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateBookmarks
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ModernExploreActionButton(
+                            title = "Random Pick",
+                            subtitle = "Discover unexpected gems",
+                            icon = Icons.Rounded.Casino,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                scope.launch {
+                                    val popular = sourceRegistry.fetchPopular()
+                                    val random = popular.randomOrNull()
+                                    if (random != null) onOpenManga(random)
+                                }
                             }
-                        }
-                    )
-                    ModernExploreActionButton(
-                        title = "Downloads",
-                        icon = Icons.Rounded.Download,
-                        modifier = Modifier.weight(1f),
-                        onClick = onNavigateDownloads
-                    )
+                        )
+                        ModernExploreActionButton(
+                            title = "Downloads",
+                            subtitle = "Active chapter queue",
+                            icon = Icons.Rounded.Download,
+                            modifier = Modifier.weight(1f),
+                            onClick = onNavigateDownloads
+                        )
+                    }
                 }
 
                 // Filter Chips Row (Including requested "New chapters", "18+", "Self-published")
@@ -304,6 +323,7 @@ fun ExploreScreen(
                     pinnedParsers.forEach { parser ->
                         ModernKotatsuSourceBadge(
                             parser = parser,
+                            sourceRegistry = sourceRegistry,
                             onClick = {
                                 val adapter = sourceRegistry.getOrCreateAdapter(parser)
                                 if (adapter != null) {
@@ -469,16 +489,16 @@ fun ExploreScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
-                                    color = tokens.primaryContainer,
+                                    color = tokens.surfaceContainerHigh,
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.size(42.dp)
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = parser.title.take(2).uppercase(),
-                                            color = tokens.primary,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp
+                                    val iconUrl = remember(parser) { sourceRegistry.getParserSourceFaviconUrl(parser) }
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(6.dp)) {
+                                        RemoteCoverImage(
+                                            url = iconUrl,
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier.fillMaxSize()
                                         )
                                     }
                                 }
@@ -672,6 +692,7 @@ fun ExploreScreen(
 @Composable
 private fun ModernExploreActionButton(
     title: String,
+    subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -681,30 +702,24 @@ private fun ModernExploreActionButton(
     val hovered by interaction.collectIsHoveredAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.03f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-    )
-
-    val bg by animateColorAsState(
-        targetValue = if (hovered) tokens.surfaceContainerHigh else tokens.surfaceCard,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-    )
-
-    val border by animateColorAsState(
-        targetValue = if (hovered) tokens.borderGlow else tokens.borderGlass,
+        targetValue = if (hovered) 1.02f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
     )
 
     Surface(
-        color = bg,
-        shape = RoundedCornerShape(12.dp),
+        color = if (hovered) tokens.surfaceContainerHigh else tokens.surfaceContainer,
+        shape = RoundedCornerShape(14.dp),
         modifier = modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .border(1.dp, border, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
+            .border(
+                width = 1.dp,
+                color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(14.dp)
+            )
+            .clip(RoundedCornerShape(14.dp))
             .hoverable(interaction)
             .clickable(onClick = onClick)
     ) {
@@ -712,21 +727,38 @@ private fun ModernExploreActionButton(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = tokens.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = title,
-                color = tokens.textPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(tokens.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = tokens.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = title,
+                    color = tokens.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    color = tokens.textMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -734,6 +766,7 @@ private fun ModernExploreActionButton(
 @Composable
 private fun ModernKotatsuSourceBadge(
     parser: MangaParserSource,
+    sourceRegistry: LiveSourceRegistry,
     onClick: () -> Unit,
 ) {
     val tokens = LocalGlassTokens.current
@@ -741,14 +774,16 @@ private fun ModernKotatsuSourceBadge(
     val hovered by interaction.collectIsHoveredAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.06f else 1f,
+        targetValue = if (hovered) 1.05f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
     )
+
+    val iconUrl = remember(parser) { sourceRegistry.getParserSourceFaviconUrl(parser) }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(88.dp)
+            .width(84.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -762,24 +797,23 @@ private fun ModernKotatsuSourceBadge(
             color = if (hovered) tokens.primaryContainer else tokens.surfaceContainerHigh,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
-                .size(72.dp)
+                .size(68.dp)
                 .border(
                     width = if (hovered) 2.dp else 1.dp,
-                    color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.5f),
+                    color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.4f),
                     shape = RoundedCornerShape(16.dp)
                 )
                 .shadow(
-                    elevation = if (hovered) 8.dp else 2.dp,
+                    elevation = if (hovered) 6.dp else 1.dp,
                     shape = RoundedCornerShape(16.dp),
                     spotColor = tokens.primary
                 )
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = parser.title.take(2).uppercase(),
-                    color = tokens.primary,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(10.dp)) {
+                RemoteCoverImage(
+                    url = iconUrl,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(44.dp)
                 )
             }
         }

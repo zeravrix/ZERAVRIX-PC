@@ -83,6 +83,18 @@ class LiveSourceRegistry(
         return adapter
     }
 
+    fun getSourceIconUrl(source: Source): String {
+        return when (source) {
+            is KotatsuSourceAdapter -> source.iconUrl
+            else -> "https://www.google.com/s2/favicons?domain=${source.name.lowercase().replace(" ", "")}.com&sz=128"
+        }
+    }
+
+    fun getParserSourceFaviconUrl(parser: MangaParserSource): String {
+        val adapter = getOrCreateAdapter(parser)
+        return adapter?.iconUrl ?: "https://www.google.com/s2/favicons?domain=${parser.name.lowercase().replace('_', '-')}.com&sz=128"
+    }
+
     fun catalogueSources(): List<CatalogueSource> = sources.filterIsInstance<CatalogueSource>()
 
     /**

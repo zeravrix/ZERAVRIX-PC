@@ -25,6 +25,14 @@ class KotatsuSourceAdapter(
     override val language: String = parserSource.locale
     override val baseUrl: String = parserSource.name.lowercase()
 
+    val domain: String by lazy {
+        runCatching {
+            loaderContext.newParserInstance(parserSource).domain
+        }.getOrDefault(parserSource.name.lowercase().replace('_', '-') + ".com")
+    }
+
+    val iconUrl: String get() = "https://www.google.com/s2/favicons?domain=$domain&sz=128"
+
     override val capabilities: SourceCapabilities = SourceCapabilities(
         popular = true,
         latest = true,
@@ -122,16 +130,46 @@ class KotatsuSourceAdapter(
         }.getOrDefault(emptyList())
     }
 
+    private fun cleanSlugToTitle(url: String, coverUrl: String?): String {
+        val raw = url.trimEnd('/').substringAfterLast('/')
+            .replace(Regex("-[a-f0-9]{6,}$"), "")
+        val target = if (raw.isNotBlank() && raw != "comics" && raw != "manga") raw else {
+            coverUrl?.substringAfterLast('/')?.substringBeforeLast('.')?.substringBeforeLast('.') ?: "Manga"
+        }
+        return target.replace('-', ' ').replace('_', ' ')
+            .split(' ')
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+    }
+
     private fun org.koitharu.kotatsu.parsers.model.Manga.toCoreManga(sourceId: Long): Manga {
+        val parsedTitle = this.title.takeIf { it.isNotBlank() }
+            ?: this.altTitles.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: cleanSlugToTitle(this.url, this.coverUrl)
+
+        val baseTags = this.tags?.map { it.title }.orEmpty()
+        val isManhwaSource = parserSource == MangaParserSource.ASURASCANS ||
+            parserSource == MangaParserSource.FLAMECOMICS ||
+            parserSource.name.contains("MANHWA", ignoreCase = true) ||
+            parserSource.name.contains("TOON", ignoreCase = true)
+
+        val enrichedGenres = if (baseTags.isEmpty() && isManhwaSource) {
+            listOf("Manhwa", "Action", "Webtoon")
+        } else if (isManhwaSource && baseTags.none { it.equals("Manhwa", ignoreCase = true) }) {
+            baseTags + "Manhwa"
+        } else {
+            baseTags
+        }
+
         return Manga(
             id = this.id.toString(),
             sourceId = sourceId,
-            title = this.title,
+            title = parsedTitle,
             coverUrl = this.coverUrl,
             author = this.authors?.joinToString(", "),
             artist = null,
             description = this.description ?: "",
-            genres = this.tags?.map { it.title }.orEmpty(),
+            genres = enrichedGenres,
             status = this.state?.name
         )
     }

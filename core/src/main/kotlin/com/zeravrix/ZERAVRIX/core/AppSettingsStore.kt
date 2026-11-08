@@ -11,34 +11,35 @@ enum class ReaderModePreference { SINGLE, DOUBLE, AUTO, VERTICAL }
 enum class AnimationLevel { SMOOTH, REDUCED, OFF }
 
 /**
- * The 13 Blueprint Themes defined in Blueprint §7A.4
+ * The 13 Authentic Kotatsu Color Schemes
  */
 enum class ColorTheme(
     val id: String,
     val title: String,
     val primaryHex: Long,
-    val secondaryHex: Long = 0xFF1D72FEL,
-    val accentHex: Long = 0xFF00D2FFL,
+    val secondaryHex: Long,
+    val darkBgHex: Long,
+    val lightBgHex: Long,
     val description: String = ""
 ) {
-    INDIGO_NIGHT("indigo_night", "Indigo Cyber", 0xFF00D2FFL, 0xFF1D72FEL, 0xFF00D2FFL, "Signature cyber blue on obsidian void"),
-    SAKURA("sakura", "Sakura", 0xFFE5739BL, 0xFFFF85A1L, 0xFFFFB3C6L, "Soft cherry blossom rose"),
-    MATCHA("matcha", "Matcha", 0xFF6FA66AL, 0xFF88D49EL, 0xFFB7E4C7L, "Calming organic green, easy on eyes"),
-    EMBER("ember", "Ember", 0xFFE8743BL, 0xFFFF9F1CL, 0xFFFFBF69L, "Warm sunset fire orange"),
-    OCEAN("ocean", "Ocean", 0xFF2E9CCAL, 0xFF48CAE4L, 0xFF90E0EFL, "Deep marine cyan blue"),
-    LAVENDER("lavender", "Lavender", 0xFF9B87F5L, 0xFFBDB2FFL, 0xFFD8BBFFL, "Regal electric violet"),
-    CRIMSON("crimson", "Crimson", 0xFFD64550L, 0xFFFF4D6DL, 0xFFFF758FL, "Bold high-energy scarlet"),
-    AURORA("aurora", "Aurora", 0xFF2FBF9BL, 0xFF8B6CFFL, 0xFF5CE1E6L, "Northern lights teal & purple duo"),
-    SUNSET("sunset", "Sunset", 0xFFF2A33AL, 0xFFE5567AL, 0xFFFFC2D1L, "Golden amber & radiant rose"),
-    GRAPHITE("graphite", "Graphite", 0xFF8A93A6L, 0xFFCBD5E1L, 0xFFE2E8F0L, "Minimal monochrome slate"),
-    PAPER("paper", "Paper / Sepia", 0xFF8B6F47L, 0xFFD4A373L, 0xFFEDC4B3L, "Warm paper book tone for long reading sessions"),
-    MONO("mono", "Mono Contrast", 0xFFFFFFFFL, 0xFFA0AEC0L, 0xFFE2E8F0L, "Ultra high-contrast crisp black & white"),
-    AMOLED_VOID("amoled", "AMOLED Void", 0xFF00D2FFL, 0xFF00E5FFL, 0xFF00D2FFL, "True pitch-black #000000 OLED matrix")
+    TOTORO("totoro", "Totoro (Indigo)", 0xFFA6C8FFL, 0xFFBCC7DCL, 0xFF0E1116L, 0xFFF9F9FFL, "Kotatsu default slate indigo"),
+    MONET("monet", "Dynamic Monet", 0xFFA8C7FAL, 0xFFBDC7DCL, 0xFF0D1219L, 0xFFF8FAFFL, "Adaptive material palette"),
+    EXPRESSIVE("expressive", "Expressive", 0xFFDDBBFAL, 0xFFD2C1DFL, 0xFF140F19L, 0xFFFCF7FFL, "Vibrant expressive lilac"),
+    MIKU("miku", "Miku (Teal)", 0xFF6FDDE2L, 0xFFA6CECFL, 0xFF0B1213L, 0xFFF5FAFAL, "Cyan teal palette"),
+    ASUKA("asuka", "Asuka (Crimson)", 0xFFFFB4A8L, 0xFFE7BDB6L, 0xFF160E0DL, 0xFFFFF8F6L, "Scarlet red palette"),
+    MION("mion", "Mion (Emerald)", 0xFFA1D39AL, 0xFFEEBF6DL, 0xFF0D140CL, 0xFFF7FBF1L, "Lush emerald green"),
+    RIKKA("rikka", "Rikka (Lavender)", 0xFFD3BBFDL, 0xFFCDC2DBL, 0xFF120E18L, 0xFFFEF7FFL, "Deep purple lavender"),
+    SAKURA("sakura", "Sakura (Rose)", 0xFFFFB1C8L, 0xFFE3BDC6L, 0xFF160E12L, 0xFFFFF8F8L, "Soft cherry blossom rose"),
+    MAMIMI("mamimi", "Mamimi (Cobalt)", 0xFFAFC6FFL, 0xFFBFC6DCL, 0xFF0E1118L, 0xFFFAF8FFL, "Deep cobalt blue"),
+    KANADE("kanade", "Kanade (Graphite)", 0xFFE2E2E6L, 0xFFDDDCDCL, 0xFF101012L, 0xFFFCF8F9L, "Monochrome dark slate"),
+    ITSUKA("itsuka", "Itsuka (Amber)", 0xFFFFBA8FL, 0xFFF7B993L, 0xFF16100AL, 0xFFFFF8F5L, "Warm sunset amber"),
+    AMOLED_VOID("amoled", "AMOLED Void", 0xFFA6C8FFL, 0xFFBCC7DCL, 0xFF000000L, 0xFF000000L, "True pitch-black #000000 OLED matrix"),
+    HIGH_CONTRAST("mono", "High Contrast", 0xFFFFFFFFL, 0xFFE2E8F0L, 0xFF050505L, 0xFFFFFFFFL, "Crisp high-contrast monochrome")
 }
 
 data class AppSettings(
     val theme: AppTheme = AppTheme.DARK,
-    val colorTheme: ColorTheme = ColorTheme.INDIGO_NIGHT,
+    val colorTheme: ColorTheme = ColorTheme.TOTORO,
     val isAmoled: Boolean = false,
     val language: AppLanguage = AppLanguage.ENGLISH,
     val readerMode: ReaderModePreference = ReaderModePreference.VERTICAL,
@@ -67,7 +68,7 @@ class SettingsStore(private val root: Path) {
         if (Files.exists(file)) Files.newInputStream(file).use { properties.load(it) }
         AppSettings(
             theme = runCatching { AppTheme.valueOf(properties.getProperty("theme", AppTheme.DARK.name)) }.getOrDefault(AppTheme.DARK),
-            colorTheme = runCatching { ColorTheme.valueOf(properties.getProperty("colorTheme", ColorTheme.INDIGO_NIGHT.name)) }.getOrDefault(ColorTheme.INDIGO_NIGHT),
+            colorTheme = runCatching { ColorTheme.valueOf(properties.getProperty("colorTheme", ColorTheme.TOTORO.name)) }.getOrDefault(ColorTheme.TOTORO),
             isAmoled = properties.getProperty("isAmoled", "false").toBoolean(),
             language = runCatching { AppLanguage.valueOf(properties.getProperty("language", AppLanguage.ENGLISH.name)) }.getOrDefault(AppLanguage.ENGLISH),
             readerMode = runCatching { ReaderModePreference.valueOf(properties.getProperty("readerMode", ReaderModePreference.VERTICAL.name)) }.getOrDefault(ReaderModePreference.VERTICAL),

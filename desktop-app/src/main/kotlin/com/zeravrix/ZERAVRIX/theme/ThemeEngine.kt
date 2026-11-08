@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * Authentic Kotatsu Material 3 Themes + Enhanced Cyber-Glass Palettes
+ * Authentic 13 Kotatsu Material 3 Color Schemes
  */
 enum class KotatsuTheme(
     val title: String,
@@ -31,6 +31,28 @@ enum class KotatsuTheme(
         darkSecondary = 0xFFBCC7DC,
         darkBackground = 0xFF0E1116,
         darkSurfaceContainer = 0xFF171A21,
+    ),
+    MONET(
+        title = "Monet (Dynamic)",
+        lightPrimary = 0xFF4A607A,
+        lightSecondary = 0xFF535F70,
+        lightBackground = 0xFFF8FAFF,
+        lightSurfaceContainer = 0xFFECEFF5,
+        darkPrimary = 0xFFA8C7FA,
+        darkSecondary = 0xFFBDC7DC,
+        darkBackground = 0xFF0D1219,
+        darkSurfaceContainer = 0xFF161C24,
+    ),
+    EXPRESSIVE(
+        title = "Expressive (Lilac)",
+        lightPrimary = 0xFF70528A,
+        lightSecondary = 0xFF665A6F,
+        lightBackground = 0xFFFCF7FF,
+        lightSurfaceContainer = 0xFFF1EBF5,
+        darkPrimary = 0xFFDDBBFA,
+        darkSecondary = 0xFFD2C1DF,
+        darkBackground = 0xFF140F19,
+        darkSurfaceContainer = 0xFF1E1724,
     ),
     MIKU(
         title = "Miku (Teal)",
@@ -119,11 +141,33 @@ enum class KotatsuTheme(
         darkSecondary = 0xFFF7B993,
         darkBackground = 0xFF16100A,
         darkSurfaceContainer = 0xFF231A12,
+    ),
+    AMOLED_VOID(
+        title = "AMOLED (Pure Black)",
+        lightPrimary = 0xFF3C6090,
+        lightSecondary = 0xFF545F71,
+        lightBackground = 0xFF000000,
+        lightSurfaceContainer = 0xFF0A0A0A,
+        darkPrimary = 0xFFA6C8FF,
+        darkSecondary = 0xFFBCC7DC,
+        darkBackground = 0xFF000000,
+        darkSurfaceContainer = 0xFF0D0D0D,
+    ),
+    HIGH_CONTRAST(
+        title = "High Contrast",
+        lightPrimary = 0xFF000000,
+        lightSecondary = 0xFF333333,
+        lightBackground = 0xFFFFFFFF,
+        lightSurfaceContainer = 0xFFF0F0F0,
+        darkPrimary = 0xFFFFFFFF,
+        darkSecondary = 0xFFE0E0E0,
+        darkBackground = 0xFF050505,
+        darkSurfaceContainer = 0xFF141414,
     );
 }
 
 /**
- * Design tokens matching Kotatsu's Material 3 styling + Modern Cyber-Glass Acrylic Effects
+ * Design tokens matching Kotatsu's Material 3 styling
  */
 data class KotatsuTokens(
     val primary: Color,
@@ -141,33 +185,23 @@ data class KotatsuTokens(
     val isDark: Boolean,
     val isAmoled: Boolean,
 ) {
-    // Cyber-Glassmorphism layer tokens
     val accentGlow: Color get() = primary.copy(alpha = 0.85f)
-    val primaryGlow: Color get() = primary.copy(alpha = 0.25f)
-    val borderGlass: Color get() = if (isDark) outlineVariant.copy(alpha = 0.40f) else outlineVariant.copy(alpha = 0.55f)
-    val borderGlow: Color get() = primary.copy(alpha = 0.60f)
+    val primaryGlow: Color get() = primary.copy(alpha = 0.20f)
+    val borderGlass: Color get() = if (isDark) outlineVariant.copy(alpha = 0.40f) else outlineVariant.copy(alpha = 0.50f)
+    val borderGlow: Color get() = primary.copy(alpha = 0.50f)
     val borderSubtle: Color get() = if (isDark) Color(0x1FFFFFFF) else Color(0x14000000)
 
-    // Acrylic surfaces
-    val surfaceGlass: Color get() = if (isAmoled) Color(0xF20A0A0A) else surfaceContainer.copy(alpha = 0.82f)
-    val surfaceCard: Color get() = if (isAmoled) Color(0xFF101010) else surfaceContainer.copy(alpha = 0.90f)
-    val surfaceGlassRaised: Color get() = if (isAmoled) Color(0xFF161616) else surfaceContainerHigh.copy(alpha = 0.94f)
-    val surfaceGlassUltra: Color get() = if (isDark) Color(0xEA11141A) else Color(0xFAFFFFFF)
+    val surfaceGlass: Color get() = if (isAmoled) Color(0xFF080808) else surfaceContainer.copy(alpha = 0.88f)
+    val surfaceCard: Color get() = if (isAmoled) Color(0xFF101010) else surfaceContainer.copy(alpha = 0.95f)
+    val surfaceGlassRaised: Color get() = if (isAmoled) Color(0xFF161616) else surfaceContainerHigh
+    val surfaceGlassUltra: Color get() = if (isDark) Color(0xFF14171E) else Color(0xFFFFFFFF)
 
-    // Gradients
     val glassGradient: Brush get() = Brush.verticalGradient(
-        listOf(
-            surfaceGlassRaised,
-            surfaceGlass
-        )
+        listOf(surfaceGlassRaised, surfaceGlass)
     )
 
     val chromeGradient: Brush get() = Brush.horizontalGradient(
-        listOf(
-            surfaceGlass,
-            surfaceGlassRaised,
-            surfaceGlass
-        )
+        listOf(surfaceGlass, surfaceGlassRaised, surfaceGlass)
     )
 }
 
@@ -175,7 +209,6 @@ val LocalKotatsuTokens = compositionLocalOf {
     createKotatsuTokens(KotatsuTheme.TOTORO, isDark = true, isAmoled = false)
 }
 
-// Backward-compatible alias for LocalGlassTokens
 val LocalGlassTokens = LocalKotatsuTokens
 
 fun createGlassTokens(
@@ -183,17 +216,21 @@ fun createGlassTokens(
     appTheme: com.zeravrix.zeravrix.core.AppTheme,
     isAmoled: Boolean,
 ): KotatsuTokens {
-    val isDark = appTheme == com.zeravrix.zeravrix.core.AppTheme.DARK || isAmoled
+    val isDark = appTheme == com.zeravrix.zeravrix.core.AppTheme.DARK || isAmoled || colorTheme == com.zeravrix.zeravrix.core.ColorTheme.AMOLED_VOID
     val kotatsuTheme = when (colorTheme) {
+        com.zeravrix.zeravrix.core.ColorTheme.TOTORO -> KotatsuTheme.TOTORO
+        com.zeravrix.zeravrix.core.ColorTheme.MONET -> KotatsuTheme.MONET
+        com.zeravrix.zeravrix.core.ColorTheme.EXPRESSIVE -> KotatsuTheme.EXPRESSIVE
+        com.zeravrix.zeravrix.core.ColorTheme.MIKU -> KotatsuTheme.MIKU
+        com.zeravrix.zeravrix.core.ColorTheme.ASUKA -> KotatsuTheme.ASUKA
+        com.zeravrix.zeravrix.core.ColorTheme.MION -> KotatsuTheme.MION
+        com.zeravrix.zeravrix.core.ColorTheme.RIKKA -> KotatsuTheme.RIKKA
         com.zeravrix.zeravrix.core.ColorTheme.SAKURA -> KotatsuTheme.SAKURA
-        com.zeravrix.zeravrix.core.ColorTheme.MATCHA -> KotatsuTheme.MION
-        com.zeravrix.zeravrix.core.ColorTheme.EMBER -> KotatsuTheme.ITSUKA
-        com.zeravrix.zeravrix.core.ColorTheme.OCEAN -> KotatsuTheme.MIKU
-        com.zeravrix.zeravrix.core.ColorTheme.LAVENDER -> KotatsuTheme.RIKKA
-        com.zeravrix.zeravrix.core.ColorTheme.CRIMSON -> KotatsuTheme.ASUKA
-        com.zeravrix.zeravrix.core.ColorTheme.GRAPHITE -> KotatsuTheme.KANADE
-        com.zeravrix.zeravrix.core.ColorTheme.AMOLED_VOID -> KotatsuTheme.TOTORO
-        else -> KotatsuTheme.TOTORO
+        com.zeravrix.zeravrix.core.ColorTheme.MAMIMI -> KotatsuTheme.MAMIMI
+        com.zeravrix.zeravrix.core.ColorTheme.KANADE -> KotatsuTheme.KANADE
+        com.zeravrix.zeravrix.core.ColorTheme.ITSUKA -> KotatsuTheme.ITSUKA
+        com.zeravrix.zeravrix.core.ColorTheme.AMOLED_VOID -> KotatsuTheme.AMOLED_VOID
+        com.zeravrix.zeravrix.core.ColorTheme.HIGH_CONTRAST -> KotatsuTheme.HIGH_CONTRAST
     }
     return createKotatsuTokens(kotatsuTheme, isDark, isAmoled || colorTheme == com.zeravrix.zeravrix.core.ColorTheme.AMOLED_VOID)
 }
