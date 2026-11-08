@@ -80,14 +80,29 @@ abstract class PortedHtmlSource(
     }
 
     protected fun cardToManga(card: Element): Manga? {
-        val anchor = card.selectFirst("a[href*=/manga/], a[href*=/series/], a[href*=/book/], a") ?: return null
+        val anchor = card.selectFirst("a[href*=/manga/], a[href*=/series/], a[href*=/book/], a[href*=/comics/], a") ?: return null
         val url = anchor.absUrl("href").ifBlank { return null }
         if (url == baseUrl || url.endsWith("/manga/") || url.endsWith("/series/")) return null
         val title = card.selectFirst(".post-title, .entry-title, .data h3, h3, h4")?.text()?.trim()
             ?: anchor.attr("title").trim().ifBlank { anchor.text().trim() }
         if (title.isBlank()) return null
         val image = card.selectFirst("img")?.imageUrl()
-        return Manga(url, title, image, sourceId = id)
+
+        val rawBadges = card.select(".manga-title-badges, .type, .manga-type, span[class*=badge], .genres a, .genres-content a, .mg_genres a, .post-item .summary-content a")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+
+        val manhwaKeywords = listOf("manhwa", "webtoon", "manhua", "مانهوا", "مانهو", "ويبتون", "ويب تون", "كوري", "صيني")
+        val combinedText = (title + " " + url + " " + rawBadges.joinToString(" ")).lowercase()
+        val isManhwa = manhwaKeywords.any { combinedText.contains(it) }
+
+        val genres = buildList {
+            addAll(rawBadges)
+            if (isManhwa && none { it.equals("Manhwa", ignoreCase = true) }) add("Manhwa")
+            if (isManhwa && none { it.equals("Webtoon", ignoreCase = true) }) add("Webtoon")
+        }.distinct()
+
+        return Manga(url, title, image, genres = genres, sourceId = id)
     }
 
     protected fun pageImages(document: Document, selectors: String): List<MangaPage> = document.select(selectors).mapNotNull { element ->
@@ -102,10 +117,13 @@ abstract class MadaraPortedSource(id: Long, name: String, baseUrl: String) : Por
         } else {
             "$baseUrl/page/${pageNumber.coerceAtLeast(1)}/?s=${URLEncoder.encode(query.trim(), StandardCharsets.UTF_8)}"
         }
-        val document = page(url)
-        val cards = document.select("div.page-item-detail, .row.c-tabs-item__content, .manga__item, .manga-item, .item-summary, .search-page .result-item article")
+        val document = runCatching { page(url) }.getOrElse {
+            if (query.isNullOrBlank()) page("$baseUrl/page/${pageNumber.coerceAtLeast(1)}/?post_type=wp-manga&orderby=$order")
+            else throw it
+        }
+        val cards = document.select("div.page-item-detail, .row.c-tabs-item__content, .manga__item, .manga-item, .item-summary, .search-page .result-item article, .bsx, .listupd .bs, .box")
         val items = cards.mapNotNull(::cardToManga).distinctBy { it.id }
-        val fallback = if (items.isEmpty()) document.select("a[href*=/manga/]").mapNotNull { link ->
+        val fallback = if (items.isEmpty()) document.select("a[href*=/manga/], a[href*=/series/], a[href*=/comics/]").mapNotNull { link ->
             cardToManga(link.parents().firstOrNull { it.selectFirst("img") != null } ?: link)
         }.distinctBy { it.id } else items
         val hasNext = document.select("a.next, a.nextpostslink, .pagination a, .nav-previous").any { it.text().contains("next", true) || it.attr("rel") == "next" || it.text().trim() == (pageNumber + 1).toString() }
@@ -121,9 +139,17 @@ abstract class MadaraPortedSource(id: Long, name: String, baseUrl: String) : Por
         val title = document.selectFirst(".post-title h1, .summary_content h1, h1.entry-title, h1")?.text()?.trim().takeUnless { it.isNullOrBlank() } ?: manga.title
         val cover = document.selectFirst(".summary_image img, .profile-manga .post-content_item img, img")?.imageUrl() ?: manga.coverUrl
         val description = document.selectFirst(".description-summary, .summary__content, .summary_content, .description, .review-content")?.text()?.trim().orEmpty()
-        val genres = document.select(".genres-content a, .genres a, .sgeneros a, a[href*=?genre=]").map { it.text().trim() }.filter(String::isNotBlank).distinct()
+        val rawGenres = (document.select(".genres-content a, .genres a, .sgeneros a, a[href*=?genre=], .manga-title-badges, [class*=type]").map { it.text().trim() }.filter(String::isNotBlank) + manga.genres).distinct()
+        val manhwaKeywords = listOf("manhwa", "webtoon", "manhua", "مانهوا", "مانهو", "ويبتون", "ويب تون", "كوري", "صيني")
+        val text = (title + " " + description + " " + rawGenres.joinToString(" ")).lowercase()
+        val isManhwa = manhwaKeywords.any { text.contains(it) }
+        val enriched = buildList {
+            addAll(rawGenres)
+            if (isManhwa && none { it.equals("Manhwa", ignoreCase = true) }) add("Manhwa")
+            if (isManhwa && none { it.equals("Webtoon", ignoreCase = true) }) add("Webtoon")
+        }.distinct()
         val author = document.selectFirst(".author-content a, [class*=author] a")?.text()?.trim()
-        return manga.copy(title = title, coverUrl = cover, description = description, genres = genres, author = author)
+        return manga.copy(title = title, coverUrl = cover, description = description, genres = enriched, author = author)
     }
 
     override suspend fun chapters(manga: Manga): List<Chapter> {

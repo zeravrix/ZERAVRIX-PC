@@ -70,7 +70,7 @@ class RepositoryWebSource(
 
     private suspend fun listPage(url: String): MangaPageResult {
         val document = repositoryPage(url)
-        val cards = document.select(".page-item-detail, .manga-item, .item-summary, .row.c-tabs-item__content, article, .manga-card")
+        val cards = document.select(".page-item-detail, .manga-item, .item-summary, .row.c-tabs-item__content, article, .manga-card, .bsx, .listupd .bs, .box, div[class*=manga]")
         val items = cards.mapNotNull { card -> mangaFromGenericCard(card) }
             .ifEmpty {
                 document.select("a[href]").mapNotNull { link ->
@@ -89,7 +89,7 @@ class RepositoryWebSource(
         val link = card.select("a[href]").maxByOrNull { candidate ->
             val href = candidate.attr("href").lowercase(Locale.ROOT)
             (if (candidate.selectFirst("img") != null) 5 else 0) +
-                (if (href.contains("/manga/") || href.contains("/series/") || href.contains("/title/") || href.contains("/comic/")) 4 else 0) +
+                (if (href.contains("/manga/") || href.contains("/series/") || href.contains("/title/") || href.contains("/comic/") || href.contains("/comics/")) 4 else 0) +
                 (if (!href.contains("chapter") && !href.contains("episode") && !href.contains("genre") && !href.contains("tag") && !href.contains("login")) 2 else 0)
         } ?: return null
         val url = link.absUrl("href").ifBlank { fallbackUrl ?: link.attr("href") }
@@ -98,7 +98,22 @@ class RepositoryWebSource(
             ?: link.text().trim().takeIf { it.isNotBlank() }
             ?: url.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
         val image = card.selectFirst("img")?.repositoryImage()
-        return Manga(url, title, image, sourceId = id)
+
+        val rawBadges = card.select(".manga-title-badges, .type, .manga-type, span[class*=badge], .genres a, .genres-content a, .mg_genres a, .tags a")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+
+        val manhwaKeywords = listOf("manhwa", "webtoon", "manhua", "long strip", "full color", "مانهوا", "مانهو", "ويبتون", "ويب تون", "كوري", "صيني")
+        val combinedText = (title + " " + url + " " + rawBadges.joinToString(" ")).lowercase(Locale.ROOT)
+        val isManhwa = manhwaKeywords.any { combinedText.contains(it) }
+
+        val genres = buildList {
+            addAll(rawBadges)
+            if (isManhwa && none { it.equals("Manhwa", ignoreCase = true) }) add("Manhwa")
+            if (isManhwa && none { it.equals("Webtoon", ignoreCase = true) }) add("Webtoon")
+        }.distinct()
+
+        return Manga(url, title, image, genres = genres, sourceId = id)
     }
 
     override suspend fun details(manga: Manga): Manga {
@@ -106,8 +121,16 @@ class RepositoryWebSource(
         val title = document.selectFirst("h1, .entry-title, .post-title")?.text()?.trim().takeUnless { it.isNullOrBlank() } ?: manga.title
         val cover = document.selectFirst(".summary_image img, .manga-thumb img, .cover img, img")?.repositoryImage() ?: manga.coverUrl
         val description = document.selectFirst(".description-summary, .summary__content, .description, .entry-content, .post-content")?.text()?.trim().orEmpty()
-        val genres = document.select("a[href*=genre], .genres-content a, .genre a").map { it.text().trim() }.filter { it.isNotBlank() }.distinct()
-        return manga.copy(title = title, coverUrl = cover, description = description, genres = genres)
+        val rawGenres = (document.select("a[href*=genre], .genres-content a, .genre a, .manga-title-badges, [class*=type]").map { it.text().trim() }.filter { it.isNotBlank() } + manga.genres).distinct()
+        val manhwaKeywords = listOf("manhwa", "webtoon", "manhua", "مانهوا", "مانهو", "ويبتون", "ويب تون", "كوري", "صيني")
+        val text = (title + " " + description + " " + rawGenres.joinToString(" ")).lowercase(Locale.ROOT)
+        val isManhwa = manhwaKeywords.any { text.contains(it) }
+        val enriched = buildList {
+            addAll(rawGenres)
+            if (isManhwa && none { it.equals("Manhwa", ignoreCase = true) }) add("Manhwa")
+            if (isManhwa && none { it.equals("Webtoon", ignoreCase = true) }) add("Webtoon")
+        }.distinct()
+        return manga.copy(title = title, coverUrl = cover, description = description, genres = enriched)
     }
 
     override suspend fun chapters(manga: Manga): List<Chapter> {

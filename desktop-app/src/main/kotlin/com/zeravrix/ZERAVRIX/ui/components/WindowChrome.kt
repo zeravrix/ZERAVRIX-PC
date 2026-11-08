@@ -108,20 +108,6 @@ fun WindowScope.WindowChrome(
                     fontSize = 13.sp,
                     letterSpacing = 1.2.sp
                 )
-                Spacer(Modifier.width(6.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(tokens.primary.copy(alpha = 0.20f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        "v1.6.0",
-                        color = tokens.primary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp
-                    )
-                }
             }
 
             // Quick Search Command Bar
@@ -148,7 +134,7 @@ fun WindowScope.WindowChrome(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (searchQuery.isNotBlank()) searchQuery else "Search manhwa, manga, 1000+ sources... ($currentScreenTitle)",
+                        text = if (searchQuery.isNotBlank()) searchQuery else "Search manga, manhwa...",
                         color = if (searchQuery.isNotBlank()) tokens.textPrimary else tokens.textMuted,
                         fontSize = 12.sp,
                         maxLines = 1,

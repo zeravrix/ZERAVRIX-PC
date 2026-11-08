@@ -43,6 +43,7 @@ data class AppSettings(
     val isAmoled: Boolean = false,
     val language: AppLanguage = AppLanguage.ENGLISH,
     val readerMode: ReaderModePreference = ReaderModePreference.VERTICAL,
+    val readingDirection: String = "LTR",
     val nsfwEnabled: Boolean = false,
     val minimizeToTray: Boolean = false,
     val refreshOnOpen: Boolean = false,
@@ -52,6 +53,9 @@ data class AppSettings(
     val lastBackupEpochMillis: Long = 0L,
     val animationLevel: AnimationLevel = AnimationLevel.SMOOTH,
     val customIconPath: String? = null,
+    val concurrentDownloads: Int = 2,
+    val autoCropMargins: Boolean = false,
+    val preferredLanguage: String = "ALL",
 )
 
 class SettingsStore(private val root: Path) {
@@ -84,6 +88,10 @@ class SettingsStore(private val root: Path) {
                     ?: if (properties.getProperty("reducedMotion", "false").toBoolean()) AnimationLevel.OFF else AnimationLevel.SMOOTH
             }.getOrDefault(AnimationLevel.SMOOTH),
             customIconPath = properties.getProperty("customIconPath")?.takeIf { it.isNotBlank() },
+            readingDirection = properties.getProperty("readingDirection", "LTR"),
+            concurrentDownloads = properties.getProperty("concurrentDownloads", "2").toIntOrNull()?.coerceIn(1, 4) ?: 2,
+            autoCropMargins = properties.getProperty("autoCropMargins", "false").toBoolean(),
+            preferredLanguage = properties.getProperty("preferredLanguage", "ALL"),
         )
     }
 
@@ -94,6 +102,7 @@ class SettingsStore(private val root: Path) {
             setProperty("isAmoled", settings.isAmoled.toString())
             setProperty("language", settings.language.name)
             setProperty("readerMode", settings.readerMode.name)
+            setProperty("readingDirection", settings.readingDirection)
             setProperty("nsfwEnabled", settings.nsfwEnabled.toString())
             setProperty("minimizeToTray", settings.minimizeToTray.toString())
             setProperty("refreshOnOpen", settings.refreshOnOpen.toString())
@@ -103,6 +112,9 @@ class SettingsStore(private val root: Path) {
             setProperty("lastBackupEpochMillis", settings.lastBackupEpochMillis.toString())
             setProperty("reducedMotion", (settings.animationLevel == AnimationLevel.OFF).toString())
             setProperty("animationLevel", settings.animationLevel.name)
+            setProperty("concurrentDownloads", settings.concurrentDownloads.toString())
+            setProperty("autoCropMargins", settings.autoCropMargins.toString())
+            setProperty("preferredLanguage", settings.preferredLanguage)
             settings.customIconPath?.takeIf { it.isNotBlank() }?.let { setProperty("customIconPath", it) }
         }
         Files.newOutputStream(file).use { properties.store(it, "ZERAVRIX desktop settings") }

@@ -23,11 +23,15 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -143,8 +147,9 @@ fun MangaShelfScreen(
     val tokens = LocalGlassTokens.current
     var query by remember(kind) { mutableStateOf("") }
     var activeFilter by remember(kind) { mutableStateOf<ShelfFilter?>(null) }
+    var localRefresh by remember { mutableIntStateOf(0) }
 
-    val rawEntries by produceState(emptyList<ShelfEntry>(), kind, refreshKey) {
+    val rawEntries by produceState(emptyList<ShelfEntry>(), kind, refreshKey, localRefresh) {
         value = withContext(Dispatchers.IO) { loadEntries(kind, libraryStore, downloader) }
     }
 
@@ -255,72 +260,142 @@ fun MangaShelfScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(header) }
                 }
                 items(items, key = { it.manga.id }) { entry ->
-                    ShelfCard(entry = entry, onClick = { onOpenManga(entry.manga) })
+                    ShelfCard(
+                        entry = entry,
+                        kind = kind,
+                        onClick = { onOpenManga(entry.manga) },
+                        onRemove = {
+                            if (kind == ShelfKind.FAVOURITES) {
+                                libraryStore.remove(entry.manga.id)
+                                localRefresh++
+                            } else if (kind == ShelfKind.HISTORY) {
+                                libraryStore.removeHistory(entry.manga.id)
+                                localRefresh++
+                            }
+                        }
+                    )
                 }
             }
         }
     }
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-private fun ShelfCard(entry: ShelfEntry, onClick: () -> Unit) {
+private fun ShelfCard(
+    entry: ShelfEntry,
+    kind: ShelfKind,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val tokens = LocalGlassTokens.current
     val manga = entry.manga
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
+    var showContextMenu by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
         targetValue = if (hovered) 1.04f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(RoundedCornerShape(12.dp))
-            .hoverable(interaction)
-            .clickable(onClick = onClick),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = tokens.surfaceContainerHigh,
+    Box {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(13f / 18f)
-                .border(
-                    width = if (hovered) 1.5.dp else 1.dp,
-                    color = if (hovered) tokens.borderGlow else tokens.borderGlass,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .shadow(
-                    elevation = if (hovered) 10.dp else 2.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    spotColor = tokens.primary
-                )
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clip(RoundedCornerShape(12.dp))
+                .hoverable(interaction)
+                .onPointerEvent(PointerEventType.Press) { event ->
+                    if (event.button == PointerButton.Secondary) {
+                        showContextMenu = true
+                    }
+                }
+                .clickable(onClick = onClick),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
-                if (entry.percent != null && entry.percent > 0) {
-                    ProgressBadge(
-                        percent = entry.percent,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = tokens.surfaceContainerHigh,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(13f / 18f)
+                    .border(
+                        width = if (hovered) 1.5.dp else 1.dp,
+                        color = if (hovered) tokens.borderGlow else tokens.borderGlass,
+                        shape = RoundedCornerShape(12.dp)
                     )
+                    .shadow(
+                        elevation = if (hovered) 10.dp else 2.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        spotColor = tokens.primary
+                    )
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    RemoteCoverImage(url = manga.coverUrl, modifier = Modifier.fillMaxSize())
+                    if (entry.percent != null && entry.percent > 0) {
+                        ProgressBadge(
+                            percent = entry.percent,
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                        )
+                    }
                 }
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = manga.title,
+                color = if (hovered) tokens.primary else tokens.textPrimary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = manga.title,
-            color = if (hovered) tokens.primary else tokens.textPrimary,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+
+        // Clean Right-Click Context Menu
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false },
+            modifier = Modifier
+                .background(tokens.surfaceContainerHigh)
+                .border(1.dp, tokens.borderGlass, RoundedCornerShape(8.dp))
+        ) {
+            if (kind == ShelfKind.FAVOURITES) {
+                DropdownMenuItem(
+                    text = { Text("Remove from Favorites", color = tokens.textPrimary, fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Rounded.FavoriteBorder,
+                            contentDescription = null,
+                            tint = tokens.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    onClick = {
+                        showContextMenu = false
+                        onRemove()
+                    }
+                )
+            } else if (kind == ShelfKind.HISTORY) {
+                DropdownMenuItem(
+                    text = { Text("Remove from History", color = tokens.textPrimary, fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Rounded.DeleteOutline,
+                            contentDescription = null,
+                            tint = tokens.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    onClick = {
+                        showContextMenu = false
+                        onRemove()
+                    }
+                )
+            }
+        }
     }
 }

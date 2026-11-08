@@ -207,20 +207,37 @@ class KotatsuSourceAdapter(
         }
 
         val baseTags = this.tags?.map { it.title }.orEmpty()
-        val isManhwaSource = parserSource == MangaParserSource.ASURASCANS ||
-            parserSource == MangaParserSource.FLAMECOMICS ||
-            parserSource == MangaParserSource.WEBTOONS_EN ||
-            parserSource == MangaParserSource.TOONILY ||
-            parserSource.name.contains("MANHWA", ignoreCase = true) ||
-            parserSource.name.contains("TOON", ignoreCase = true)
+        val pName = parserSource.name.uppercase()
+        val isDedicatedManhwaSource = pName.contains("ASURA") ||
+            pName.contains("FLAME") ||
+            pName.contains("WEBTOON") ||
+            pName.contains("TOON") ||
+            pName.contains("MANHWA") ||
+            pName.contains("REAPER") ||
+            pName.contains("COSMIC") ||
+            pName.contains("VOID") ||
+            pName.contains("DRAKE") ||
+            pName.contains("LUMINOUS")
 
-        val enrichedGenres = if (baseTags.isEmpty() && isManhwaSource) {
-            listOf("Manhwa", "Action", "Webtoon")
-        } else if (isManhwaSource && baseTags.none { it.equals("Manhwa", ignoreCase = true) }) {
-            baseTags + "Manhwa"
-        } else {
-            baseTags
-        }
+        val manhwaKeywords = listOf(
+            "manhwa", "webtoon", "manhua", "long strip", "full color", "web comic", "korean",
+            "مانهوا", "مانهو", "ويبتون", "ويب تون", "كوري", "صيني"
+        )
+
+        val textToScan = (parsedTitle + " " + this.url + " " + (this.description ?: "") + " " + baseTags.joinToString(" ")).lowercase()
+        val hasManhwaKeyword = manhwaKeywords.any { textToScan.contains(it) }
+
+        val isManhwa = isDedicatedManhwaSource || hasManhwaKeyword
+
+        val enrichedGenres = buildList {
+            addAll(baseTags)
+            if (isManhwa && none { it.equals("Manhwa", ignoreCase = true) }) {
+                add("Manhwa")
+            }
+            if (isManhwa && none { it.equals("Webtoon", ignoreCase = true) }) {
+                add("Webtoon")
+            }
+        }.distinct()
 
         return Manga(
             id = this.id.toString(),

@@ -160,7 +160,11 @@ fun DetailsScreen(
         out
     }
 
-    fun startPageFor(chapter: Chapter): Int = if (chapter.id == currentId) progress?.pageIndex ?: 0 else 0
+    fun startPageFor(chapter: Chapter): Int {
+        val chProgress = libraryStore.readProgress(manga.id, chapter.id)
+        if (chProgress != null && chProgress.pageIndex > 0) return chProgress.pageIndex
+        return if (chapter.id == currentId) progress?.pageIndex ?: 0 else 0
+    }
 
     ZTwoPane(
         left = {

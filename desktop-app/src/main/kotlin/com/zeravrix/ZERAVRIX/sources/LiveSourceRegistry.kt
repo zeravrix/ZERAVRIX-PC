@@ -29,6 +29,23 @@ class LiveSourceRegistry(
         add(KomgaSource(appDir))
         add(KavitaSource(appDir))
 
+        // Seamlessly load user-imported repository sources without breaking the importing system
+        runCatching {
+            val repositoryStore = com.zeravrix.zeravrix.core.RepositorySourceStore(appDir)
+            repositoryStore.load().forEach { descriptor ->
+                add(RepositoryWebSource(descriptor, appDir))
+            }
+        }
+
+        // Load trusted user extension JARs if present
+        runCatching {
+            val extDir = appDir.resolve("extensions")
+            if (java.nio.file.Files.isDirectory(extDir)) {
+                val loader = ExtensionLoader()
+                addAll(loader.loadDirectory(extDir))
+            }
+        }
+
         if (loaderContext != null) {
             val kotatsuCurated = listOf(
                 MangaParserSource.WEBTOONS_EN,
@@ -87,7 +104,11 @@ class LiveSourceRegistry(
     fun getSourceIconUrl(source: Source): String {
         return when (source) {
             is KotatsuSourceAdapter -> source.iconUrl
-            else -> "https://www.google.com/s2/favicons?domain=${source.name.lowercase().replace(" ", "")}.com&sz=128"
+            else -> {
+                val host = runCatching { java.net.URI(source.baseUrl).host }.getOrNull()
+                val domain = if (!host.isNullOrBlank()) host else "${source.name.lowercase().replace(" ", "")}.com"
+                "https://www.google.com/s2/favicons?domain=$domain&sz=128"
+            }
         }
     }
 
@@ -106,7 +127,7 @@ class LiveSourceRegistry(
             if (page == 1 && popularCache.containsKey(sourceId)) {
                 return@withContext popularCache[sourceId].orEmpty()
             }
-            val res = (sourceMap[sourceId] as? CatalogueSource)?.popular(page)?.items.orEmpty()
+            val res = (get(sourceId) as? CatalogueSource)?.popular(page)?.items.orEmpty()
             if (page == 1 && res.isNotEmpty()) {
                 popularCache[sourceId] = res
             }
@@ -120,9 +141,10 @@ class LiveSourceRegistry(
             val prioritized = catalogueSources().filter { it.capabilities.popular }
             val quickTargets = prioritized.filter {
                 it.name.contains("Dex", ignoreCase = true) ||
-                it.name.contains("Kakalot", ignoreCase = true) ||
+                it.name.contains("Webtoon", ignoreCase = true) ||
+                it.name.contains("Toon", ignoreCase = true) ||
                 it.name.contains("Asura", ignoreCase = true) ||
-                it.name.contains("Flame", ignoreCase = true)
+                it.name.contains("Swat", ignoreCase = true)
             }.ifEmpty { prioritized.take(4) }
 
             val jobs = quickTargets.map { source ->
@@ -143,7 +165,7 @@ class LiveSourceRegistry(
 
     suspend fun fetchLatest(sourceId: Long? = null, page: Int = 1): List<Manga> = withContext(Dispatchers.IO) {
         if (sourceId != null) {
-            (sourceMap[sourceId] as? CatalogueSource)?.latest(page)?.items.orEmpty()
+            (get(sourceId) as? CatalogueSource)?.latest(page)?.items.orEmpty()
         } else {
             val quickTargets = catalogueSources().filter { it.capabilities.latest }.take(4)
             val jobs = quickTargets.map { source ->
@@ -160,7 +182,7 @@ class LiveSourceRegistry(
     suspend fun search(query: String, sourceId: Long? = null, page: Int = 1): List<Manga> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
         if (sourceId != null) {
-            (sourceMap[sourceId] as? CatalogueSource)?.search(page, query)?.items.orEmpty()
+            (get(sourceId) as? CatalogueSource)?.search(page, query)?.items.orEmpty()
         } else {
             val quickTargets = catalogueSources().filter { it.capabilities.search }.take(5)
             val jobs = quickTargets.map { source ->

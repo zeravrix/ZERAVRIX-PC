@@ -2,7 +2,6 @@ package com.zeravrix.zeravrix.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -13,10 +12,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -36,21 +32,20 @@ import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import org.jetbrains.skia.Image as SkiaImage
 
 /**
- * Authentic Kotatsu Landscape Navigation Items with High-Quality Material Icons
+ * Top-level application navigation destinations.
  */
 enum class AppNavScreen(
     val id: String,
     val icon: ImageVector,
     val title: String,
 ) {
-    EXPLORE("explore", Icons.Rounded.Explore, "Explore"),
-    FAVOURITES("favourites", Icons.Rounded.Favorite, "Favourites"),
     HISTORY("history", Icons.Rounded.History, "History"),
-    DOWNLOADS("downloads", Icons.Rounded.Download, "Downloads"),
+    FAVOURITES("favourites", Icons.Rounded.Favorite, "Favorites"),
+    EXPLORE("explore", Icons.Rounded.Explore, "Explore"),
     FEED("feed", Icons.Rounded.DynamicFeed, "Feed"),
-    SETTINGS("settings", Icons.Rounded.Settings, "Settings");
+    SETTINGS("settings", Icons.Rounded.Settings, "Settings"),
+    DOWNLOADS("downloads", Icons.Rounded.Download, "Downloads");
 
-    // Backward compatibility aliases
     companion object {
         val LIBRARY = FAVOURITES
         val LATEST = EXPLORE
@@ -59,15 +54,18 @@ enum class AppNavScreen(
 }
 
 /**
- * Replicates Kotatsu's layout-w600dp-land/activity_main.xml navigation rail
- * Enhanced with modern Glassmorphism, smooth animations & vector typography
+ * Clean, modern navigation rail matching exact layout order:
+ * 1. History
+ * 2. Favorites
+ * 3. Explore
+ * (Noticeable visual gap)
+ * 5. Feed (above Settings in bottom-left)
+ * 4. Settings (bottom-left)
  */
 @Composable
 fun AppNavigationRail(
     currentScreen: AppNavScreen,
     onScreenSelect: (AppNavScreen) -> Unit,
-    onResumeReading: (() -> Unit)? = null,
-    hasResumeTarget: Boolean = false,
     feedBadgeCount: Int = 0,
 ) {
     val tokens = LocalGlassTokens.current
@@ -84,7 +82,7 @@ fun AppNavigationRail(
     Surface(
         modifier = Modifier
             .fillMaxHeight()
-            .width(80.dp)
+            .width(76.dp)
             .border(
                 width = 1.dp,
                 color = tokens.borderGlass,
@@ -96,16 +94,16 @@ fun AppNavigationRail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 12.dp),
+                .padding(vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // App Branding Mark
             Surface(
-                color = tokens.primaryContainer.copy(alpha = 0.5f),
+                color = tokens.primaryContainer.copy(alpha = 0.45f),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .size(44.dp)
-                    .border(1.dp, tokens.borderGlow.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                    .border(1.dp, tokens.borderGlow.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
                     .shadow(elevation = 4.dp, shape = RoundedCornerShape(14.dp), spotColor = tokens.primary)
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(6.dp)) {
@@ -128,99 +126,63 @@ fun AppNavigationRail(
 
             Spacer(Modifier.height(14.dp))
 
-            // Settings button explicitly placed at TOP above other buttons as requested
-            val isSettingsSelected = currentScreen == AppNavScreen.SETTINGS
-            val settingsInteraction = remember { MutableInteractionSource() }
-            val settingsHovered by settingsInteraction.collectIsHoveredAsState()
-
-            Surface(
-                color = when {
-                    isSettingsSelected -> tokens.primaryContainer
-                    settingsHovered -> tokens.surfaceContainerHigh
-                    else -> tokens.surfaceContainer.copy(alpha = 0.6f)
-                },
-                contentColor = if (isSettingsSelected) tokens.primary else tokens.textPrimary,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .size(46.dp)
-                    .hoverable(settingsInteraction)
-                    .clickable(interactionSource = settingsInteraction, indication = null) {
-                        onScreenSelect(AppNavScreen.SETTINGS)
-                    }
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        imageVector = Icons.Rounded.Settings,
-                        contentDescription = "Settings",
-                        tint = if (isSettingsSelected) tokens.primary else if (settingsHovered) tokens.textPrimary else tokens.textMuted,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
             HorizontalDivider(
-                modifier = Modifier.width(40.dp),
+                modifier = Modifier.width(36.dp),
                 thickness = 1.dp,
-                color = tokens.outlineVariant.copy(alpha = 0.35f)
+                color = tokens.outlineVariant.copy(alpha = 0.3f)
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
-            // Kotatsu Navigation Rail FAB (Resume Reading)
-            if (hasResumeTarget && onResumeReading != null) {
-                FloatingActionButton(
-                    onClick = onResumeReading,
-                    containerColor = tokens.primary,
-                    contentColor = tokens.onPrimary,
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp, pressedElevation = 8.dp),
-                    modifier = Modifier.size(46.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.PlayArrow,
-                        contentDescription = "Resume Reading",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Main Content Navigation Items (Exclude SETTINGS since it is placed at TOP above other buttons)
-            val contentScreens = listOf(
-                AppNavScreen.EXPLORE,
-                AppNavScreen.FAVOURITES,
+            // TOP NAVIGATION GROUP: 1. History, 2. Favorites, 3. Explore
+            val topScreens = listOf(
                 AppNavScreen.HISTORY,
-                AppNavScreen.DOWNLOADS,
-                AppNavScreen.FEED
+                AppNavScreen.FAVOURITES,
+                AppNavScreen.EXPLORE
             )
 
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                contentScreens.forEach { screen ->
-                    val selected = currentScreen == screen
-                    val badge = if (screen == AppNavScreen.FEED && feedBadgeCount > 0) feedBadgeCount.toString() else null
-
-                    KotatsuNavRailItem(
+                topScreens.forEach { screen ->
+                    NavRailButton(
                         screen = screen,
-                        selected = selected,
-                        badge = badge,
+                        selected = currentScreen == screen,
                         onClick = { onScreenSelect(screen) }
                     )
                 }
+            }
+
+            // NOTICEABLE VISUAL GAP between main navigation and bottom actions
+            Spacer(modifier = Modifier.weight(1f))
+
+            // BOTTOM NAVIGATION GROUP: 5. Feed (above Settings), 4. Settings (at the bottom)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Feed button
+                NavRailButton(
+                    screen = AppNavScreen.FEED,
+                    selected = currentScreen == AppNavScreen.FEED,
+                    badge = if (feedBadgeCount > 0) feedBadgeCount.toString() else null,
+                    onClick = { onScreenSelect(AppNavScreen.FEED) }
+                )
+
+                // Settings button (positioned at the bottom-left of screen)
+                NavRailButton(
+                    screen = AppNavScreen.SETTINGS,
+                    selected = currentScreen == AppNavScreen.SETTINGS,
+                    onClick = { onScreenSelect(AppNavScreen.SETTINGS) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun KotatsuNavRailItem(
+private fun NavRailButton(
     screen: AppNavScreen,
     selected: Boolean,
     badge: String? = null,
@@ -249,19 +211,19 @@ private fun KotatsuNavRailItem(
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.08f else 1f,
+        targetValue = if (hovered) 1.06f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
     )
 
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(52.dp, 40.dp)
+            .size(50.dp, 40.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(13.dp))
             .background(containerColor)
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
@@ -278,11 +240,15 @@ private fun KotatsuNavRailItem(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 4.dp, end = 6.dp)
-                    .clip(CircleShape)
-                    .background(tokens.primary)
+                    .background(tokens.primary, RoundedCornerShape(8.dp))
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
-                Text(badge, color = tokens.onPrimary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = badge,
+                    color = tokens.onPrimary,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

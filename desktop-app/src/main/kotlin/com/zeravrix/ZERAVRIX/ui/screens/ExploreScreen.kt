@@ -18,18 +18,24 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,24 +43,36 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zeravrix.zeravrix.core.Manga
+import com.zeravrix.zeravrix.source.CatalogueSource
+import com.zeravrix.zeravrix.source.Source
 import com.zeravrix.zeravrix.sources.KotatsuSourceAdapter
 import com.zeravrix.zeravrix.sources.LiveSourceRegistry
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import com.zeravrix.zeravrix.ui.components.ZChip
 import com.zeravrix.zeravrix.ui.components.ZSearchBar
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.model.SortOrder
+import java.util.concurrent.ConcurrentHashMap
+
+// In-memory cache for fast Explore cover loading and zero repeated network requests
+private val exploreCoverCache = ConcurrentHashMap<String, String>()
+
+data class ExploreSourceItem(
+    val id: String,
+    val name: String,
+    val language: String,
+    val iconUrl: String,
+    val sourceInstance: CatalogueSource,
+)
 
 /**
- * Restyled Kotatsu Landscape Explore & Sources Screen
- * Featuring:
- * - High-speed search bar with instant vector clear
- * - Modern Glass Action Buttons (Local Storage, Bookmarks, Random Manga, Downloads)
- * - Required Filter Chips: "New chapters", "18+", "Self-published", and categories
- * - Pinned Sources Grid with cyber-glass badges & hover physics
- * - Full 1000+ Sources Catalog with language filter and pinning
- * - Remote Source Manga Catalogue with sorting and pagination
+ * Redesigned Explore Page:
+ * - Suggested Manga/Manhwa Recommendation Slider with 15s auto-rotation and manual arrow controls
+ * - Pinned Sources with right-click unpinning
+ * - High-speed sources catalog supporting Kotatsu, Arabic built-in, and imported sources
+ * - Robust Manhwa & Manga classification
  */
 @Composable
 fun ExploreScreen(
@@ -69,37 +87,68 @@ fun ExploreScreen(
     val tokens = LocalGlassTokens.current
     val scope = rememberCoroutineScope()
 
-    // View mode: "EXPLORE" (default), "CATALOG" (all 1000+ sources), "SOURCE_VIEW" (manga from one source)
+    // View mode: "EXPLORE" (default), "CATALOG" (all sources), "SOURCE_VIEW" (manga from one source)
     var viewMode by remember { mutableStateOf("EXPLORE") }
-    var selectedSource by remember { mutableStateOf<KotatsuSourceAdapter?>(null) }
+    var selectedSource by remember { mutableStateOf<CatalogueSource?>(null) }
     var sourceSortOrder by remember { mutableStateOf(SortOrder.POPULARITY) }
     var sourcePage by remember { mutableStateOf(1) }
     var sourceSearchQuery by remember { mutableStateOf("") }
     var sourceMangaList by remember { mutableStateOf<List<Manga>>(emptyList()) }
     var isLoadingSource by remember { mutableStateOf(false) }
 
-    // Required Filter Chips
+    // Filter Chips
     var filterNewChapters by remember { mutableStateOf(false) }
     var filterNsfw by remember { mutableStateOf(false) }
     var filterSelfPublished by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("All") }
 
-    // Pinned sources list
-    val allParsers = remember { sourceRegistry.getAllKotatsuParserSources() }
-    var pinnedParserNames by remember {
+    // Build the complete list of available sources (Kotatsu + Arabic Built-ins + Imported)
+    val allSourcesList = remember(sourceRegistry) {
+        val list = mutableListOf<ExploreSourceItem>()
+        // 1. Built-in and imported catalogue sources
+        sourceRegistry.catalogueSources().forEach { src ->
+            if (src !is KotatsuSourceAdapter) {
+                list += ExploreSourceItem(
+                    id = "builtin_${src.id}",
+                    name = src.name,
+                    language = src.language,
+                    iconUrl = sourceRegistry.getSourceIconUrl(src),
+                    sourceInstance = src
+                )
+            }
+        }
+        // 2. Kotatsu parser sources
+        sourceRegistry.getAllKotatsuParserSources().forEach { parser ->
+            val adapter = sourceRegistry.getOrCreateAdapter(parser)
+            if (adapter != null) {
+                list += ExploreSourceItem(
+                    id = parser.name,
+                    name = parser.title,
+                    language = parser.locale,
+                    iconUrl = sourceRegistry.getParserSourceFaviconUrl(parser),
+                    sourceInstance = adapter
+                )
+            }
+        }
+        list
+    }
+
+    // Pinned sources (stores source ID or parser name)
+    var pinnedSourceIds by remember {
         mutableStateOf(
             setOf(
                 "WEBTOONS_EN",
                 "MANGADEX",
                 "TOONILY",
                 "MANGATOWN",
-                "ASURASCANS",
-                "MANGAKAKALOT"
+                "builtin_${0x4D414E4741535741L}", // MangaSwat (Arabic)
+                "builtin_${0x5445414D584CL}",       // Team X (Arabic)
+                "builtin_${0x4D414E47414C454BL}"   // Mangalek (Arabic)
             )
         )
     }
 
-    // Sources catalog filters
+    // Catalog search & language filter
     var catalogSearch by remember { mutableStateOf("") }
     var catalogLanguage by remember { mutableStateOf("ALL") }
 
@@ -125,12 +174,22 @@ fun ExploreScreen(
         }
     }
 
-    // Load source remote list
-    fun loadSourceManga(source: KotatsuSourceAdapter, page: Int, order: SortOrder, query: String?) {
+    // Load remote manga from selected source
+    fun loadSourceManga(source: CatalogueSource, page: Int, order: SortOrder, query: String?) {
         scope.launch {
             isLoadingSource = true
-            val res = source.fetchList(page = page, order = order, query = query)
-            sourceMangaList = res.items
+            val items = if (source is KotatsuSourceAdapter) {
+                source.fetchList(page = page, order = order, query = query).items
+            } else {
+                if (!query.isNullOrBlank()) {
+                    source.search(page, query).items
+                } else if (order == SortOrder.UPDATED) {
+                    source.latest(page).items
+                } else {
+                    source.popular(page).items
+                }
+            }
+            sourceMangaList = items
             isLoadingSource = false
         }
     }
@@ -142,30 +201,49 @@ fun ExploreScreen(
         }
     }
 
+    // Robust Manhwa & Category Filter
     val filteredExploreList = remember(exploreMangaList, filterNewChapters, filterNsfw, filterSelfPublished, selectedCategory) {
         exploreMangaList.filter { manga ->
             val matchesCategory = if (selectedCategory == "All") true else {
                 val cat = selectedCategory.lowercase()
-                manga.genres.any { it.lowercase().contains(cat) } ||
+                val isManhwaTarget = cat == "manhwa" || cat == "webtoon"
+                val manhwaKeywords = listOf("manhwa", "webtoon", "manhua", "long strip", "full color", "scroll", "مانهوا", "مانهو", "ويبتون", "ويب تون", "كوري", "صيني")
+
+                if (isManhwaTarget) {
+                    manga.genres.any { g ->
+                        val l = g.lowercase()
+                        manhwaKeywords.any { l.contains(it) }
+                    } ||
+                    manhwaKeywords.any { manga.title.lowercase().contains(it) } ||
+                    manga.url?.lowercase()?.let { u -> u.contains("manhwa") || u.contains("webtoon") || u.contains("comics") } == true ||
+                    (manga.sourceId >= 10000L && runCatching {
+                        val ordinal = (manga.sourceId - 10000L).toInt()
+                        val parser = MangaParserSource.entries.getOrNull(ordinal)
+                        parser?.name?.contains("ASURA") == true || parser?.name?.contains("FLAME") == true ||
+                        parser?.name?.contains("TOON") == true || parser?.name?.contains("WEBTOON") == true ||
+                        parser?.name?.contains("MANHWA") == true
+                    }.getOrDefault(false))
+                } else {
+                    manga.genres.any { it.lowercase().contains(cat) } ||
                     manga.title.lowercase().contains(cat) ||
-                    manga.description.lowercase().contains(cat) ||
-                    (cat == "manhwa" && manga.genres.any {
-                        val g = it.lowercase()
-                        g.contains("webtoon") || g.contains("long strip") || g.contains("full color") || g.contains("manhwa")
-                    })
+                    manga.description.lowercase().contains(cat)
+                }
             }
+
             val matchesNsfw = if (!filterNsfw) true else {
                 manga.genres.any { g ->
                     val l = g.lowercase()
                     l.contains("18+") || l.contains("mature") || l.contains("erotica") || l.contains("hentai") || l.contains("adult")
                 }
             }
+
             val matchesSelfPublished = if (!filterSelfPublished) true else {
                 manga.genres.any { g ->
                     val l = g.lowercase()
                     l.contains("webtoon") || l.contains("indie") || l.contains("self-published") || l.contains("comic")
                 }
             }
+
             matchesCategory && matchesNsfw && matchesSelfPublished
         }
     }
@@ -177,22 +255,37 @@ fun ExploreScreen(
     ) {
         when (viewMode) {
             "EXPLORE" -> {
-                // High-performance search bar
+                // Compact Search Bar
                 ZSearchBar(
                     query = searchQuery,
                     onQueryChange = onSearchChange,
-                    hint = "Search 1000+ sources by manhwa, manga or author…",
+                    hint = "Search manga, manhwa, authors...",
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    onSubmit = { loadExploreContent() }
                 )
 
-                // Streamlined Action Pills (Clean, minimal, intuitive)
+                // Recommendation Slider (Auto-rotates every 15s with manual arrows)
+                val sliderItems = remember(exploreMangaList) {
+                    exploreMangaList.take(8)
+                }
+                if (sliderItems.isNotEmpty() && searchQuery.isBlank()) {
+                    RecommendationSlider(
+                        items = sliderItems,
+                        onOpenManga = onOpenManga,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                    )
+                }
+
+                // Action Pills Row (Clean, single-line, icon-first)
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     ModernExploreActionButton(
-                        title = "Local",
-                        icon = Icons.Rounded.Folder,
+                        title = "Local Files",
+                        icon = Icons.Rounded.FolderOpen,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateLocal
                     )
@@ -222,7 +315,7 @@ fun ExploreScreen(
                     )
                 }
 
-                // Filter Chips Row (Including requested "New chapters", "18+", "Self-published")
+                // Filter Chips Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -258,7 +351,7 @@ fun ExploreScreen(
                     }
                 }
 
-                // Sources Header & Catalog Access
+                // Pinned Sources Header & Catalog Button
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -267,7 +360,7 @@ fun ExploreScreen(
                     Text(
                         "PINNED SOURCES",
                         color = tokens.textPrimary,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
@@ -279,24 +372,27 @@ fun ExploreScreen(
                             contentColor = tokens.primary
                         ),
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Language,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            "Sources Catalog (${allParsers.size})",
+                            "Sources Catalog",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                // Pinned sources 72x72 favicon row
-                val pinnedParsers = allParsers.filter { it.name in pinnedParserNames }
+                // Pinned Sources Row (Displays ONLY sources explicitly pinned by the user)
+                val pinnedSources = remember(allSourcesList, pinnedSourceIds) {
+                    allSourcesList.filter { it.id in pinnedSourceIds }
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -304,18 +400,17 @@ fun ExploreScreen(
                         .padding(bottom = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    pinnedParsers.forEach { parser ->
-                        ModernKotatsuSourceBadge(
-                            parser = parser,
-                            sourceRegistry = sourceRegistry,
+                    pinnedSources.forEach { item ->
+                        PinnedSourceBadge(
+                            sourceItem = item,
                             onClick = {
-                                val adapter = sourceRegistry.getOrCreateAdapter(parser)
-                                if (adapter != null) {
-                                    selectedSource = adapter
-                                    sourcePage = 1
-                                    sourceSearchQuery = ""
-                                    viewMode = "SOURCE_VIEW"
-                                }
+                                selectedSource = item.sourceInstance
+                                sourcePage = 1
+                                sourceSearchQuery = ""
+                                viewMode = "SOURCE_VIEW"
+                            },
+                            onUnpin = {
+                                pinnedSourceIds = pinnedSourceIds - item.id
                             }
                         )
                     }
@@ -324,7 +419,7 @@ fun ExploreScreen(
                 Text(
                     text = if (searchQuery.isNotBlank()) "SEARCH RESULTS" else "POPULAR DISCOVERIES",
                     color = tokens.textPrimary,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
                     modifier = Modifier.padding(bottom = 10.dp)
@@ -356,7 +451,7 @@ fun ExploreScreen(
             }
 
             "CATALOG" -> {
-                // Sources Catalog view
+                // Full Sources Catalog view (Kotatsu + Arabic Built-ins + Imported)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -378,7 +473,7 @@ fun ExploreScreen(
                     Spacer(Modifier.width(16.dp))
 
                     Text(
-                        "SOURCES CATALOG (1000+ PARSERS)",
+                        "SOURCES CATALOG",
                         color = tokens.primary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -388,7 +483,7 @@ fun ExploreScreen(
                     Spacer(Modifier.weight(1f))
 
                     // Language Selector
-                    val languages = listOf("ALL", "en", "ja", "ar", "ru", "es", "fr", "it", "ko", "zh")
+                    val languages = listOf("ALL", "ar", "en", "ja", "ko", "zh", "es", "fr")
                     var langMenuExpanded by remember { mutableStateOf(false) }
 
                     Box {
@@ -419,15 +514,15 @@ fun ExploreScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Search sources input
+                // Compact Search sources input
                 OutlinedTextField(
                     value = catalogSearch,
                     onValueChange = { catalogSearch = it },
-                    placeholder = { Text("Search sources by name or language...") },
+                    placeholder = { Text("Search sources by name or language...", fontSize = 13.sp) },
                     leadingIcon = {
-                        Icon(Icons.Rounded.Search, contentDescription = null, tint = tokens.primary)
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = tokens.primary, modifier = Modifier.size(18.dp))
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -438,18 +533,20 @@ fun ExploreScreen(
 
                 Spacer(Modifier.height(14.dp))
 
-                val filteredParsers = allParsers.filter { parser ->
-                    val matchName = catalogSearch.isBlank() || parser.title.contains(catalogSearch, ignoreCase = true)
-                    val matchLang = catalogLanguage == "ALL" || parser.locale.equals(catalogLanguage, ignoreCase = true)
-                    matchName && matchLang
+                val filteredSources = remember(allSourcesList, catalogSearch, catalogLanguage) {
+                    allSourcesList.filter { item ->
+                        val matchName = catalogSearch.isBlank() || item.name.contains(catalogSearch, ignoreCase = true)
+                        val matchLang = catalogLanguage == "ALL" || item.language.equals(catalogLanguage, ignoreCase = true)
+                        matchName && matchLang
+                    }
                 }
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredParsers) { parser ->
-                        val isPinned = parser.name in pinnedParserNames
+                    items(filteredSources, key = { it.id }) { item ->
+                        val isPinned = item.id in pinnedSourceIds
                         Surface(
                             color = tokens.surfaceContainer,
                             shape = RoundedCornerShape(12.dp),
@@ -457,13 +554,10 @@ fun ExploreScreen(
                                 .fillMaxWidth()
                                 .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                                 .clickable {
-                                    val adapter = sourceRegistry.getOrCreateAdapter(parser)
-                                    if (adapter != null) {
-                                        selectedSource = adapter
-                                        sourcePage = 1
-                                        sourceSearchQuery = ""
-                                        viewMode = "SOURCE_VIEW"
-                                    }
+                                    selectedSource = item.sourceInstance
+                                    sourcePage = 1
+                                    sourceSearchQuery = ""
+                                    viewMode = "SOURCE_VIEW"
                                 }
                         ) {
                             Row(
@@ -475,12 +569,11 @@ fun ExploreScreen(
                                 Surface(
                                     color = tokens.surfaceContainerHigh,
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.size(42.dp)
+                                    modifier = Modifier.size(40.dp)
                                 ) {
-                                    val iconUrl = remember(parser) { sourceRegistry.getParserSourceFaviconUrl(parser) }
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(6.dp)) {
                                         RemoteCoverImage(
-                                            url = iconUrl,
+                                            url = item.iconUrl,
                                             contentScale = ContentScale.Fit,
                                             modifier = Modifier.fillMaxSize()
                                         )
@@ -491,13 +584,13 @@ fun ExploreScreen(
 
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        text = parser.title,
+                                        text = item.name,
                                         color = tokens.textPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "Language: ${parser.locale.uppercase()}",
+                                        text = "Language: ${item.language.uppercase()}",
                                         color = tokens.textMuted,
                                         fontSize = 11.sp
                                     )
@@ -505,10 +598,10 @@ fun ExploreScreen(
 
                                 IconButton(
                                     onClick = {
-                                        pinnedParserNames = if (isPinned) {
-                                            pinnedParserNames - parser.name
+                                        pinnedSourceIds = if (isPinned) {
+                                            pinnedSourceIds - item.id
                                         } else {
-                                            pinnedParserNames + parser.name
+                                            pinnedSourceIds + item.id
                                         }
                                     }
                                 ) {
@@ -599,11 +692,11 @@ fun ExploreScreen(
                         sourceSearchQuery = it
                         sourcePage = 1
                     },
-                    placeholder = { Text("Search on ${src.name}...") },
+                    placeholder = { Text("Search on ${src.name}...", fontSize = 13.sp) },
                     leadingIcon = {
-                        Icon(Icons.Rounded.Search, contentDescription = null, tint = tokens.primary)
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = tokens.primary, modifier = Modifier.size(18.dp))
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -620,7 +713,7 @@ fun ExploreScreen(
                     }
                 } else if (sourceMangaList.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No manga found for this query/source.", color = tokens.textMuted)
+                        Text("No titles found for this query/source.", color = tokens.textMuted)
                     }
                 } else {
                     LazyVerticalGrid(
@@ -655,7 +748,7 @@ fun ExploreScreen(
                         }
 
                         Spacer(Modifier.width(20.dp))
-                        Text("Page $sourcePage", color = tokens.textPrimary, fontWeight = FontWeight.Bold)
+                        Text("Page $sourcePage", color = tokens.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(Modifier.width(20.dp))
 
                         FilledTonalButton(
@@ -669,6 +762,323 @@ fun ExploreScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Suggested Manga / Manhwa recommendation slider:
+ * - Changes title automatically every 15 seconds
+ * - Left/right arrow controls for manual navigation without interfering with timer
+ */
+@Composable
+private fun RecommendationSlider(
+    items: List<Manga>,
+    onOpenManga: (Manga) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) return
+    val tokens = LocalGlassTokens.current
+    var currentIndex by remember { mutableIntStateOf(0) }
+    var resetTick by remember { mutableLongStateOf(0L) }
+
+    // Auto-advance every 15 seconds
+    LaunchedEffect(resetTick, items.size) {
+        delay(15_000L)
+        currentIndex = (currentIndex + 1) % items.size
+        resetTick++
+    }
+
+    val currentManga = items[currentIndex.coerceIn(0, items.lastIndex)]
+
+    Surface(
+        color = tokens.surfaceContainerHigh,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .border(1.dp, tokens.borderGlass, RoundedCornerShape(16.dp))
+            .shadow(elevation = 6.dp, shape = RoundedCornerShape(16.dp), spotColor = tokens.primary)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onOpenManga(currentManga) }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Subtle backdrop cover with vignette gradient
+            RemoteCoverImage(
+                url = currentManga.coverUrl,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = 0.18f }
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                tokens.surfaceContainerHigh,
+                                tokens.surfaceContainerHigh.copy(alpha = 0.85f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            // Content Row
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Cover Thumbnail
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = tokens.surfaceContainer,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(13f / 18f)
+                        .border(1.dp, tokens.borderGlass, RoundedCornerShape(10.dp))
+                        .shadow(4.dp, RoundedCornerShape(10.dp))
+                ) {
+                    RemoteCoverImage(
+                        url = currentManga.coverUrl,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(Modifier.width(18.dp))
+
+                // Metadata Column
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = tokens.primary,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "FEATURED",
+                                color = tokens.onPrimary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        if (currentManga.genres.isNotEmpty()) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = currentManga.genres.take(3).joinToString(" • "),
+                                color = tokens.primary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = currentManga.title,
+                        color = tokens.textPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = currentManga.description.ifBlank { "Discover and read this trending title." },
+                        color = tokens.textMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    FilledTonalButton(
+                        onClick = { onOpenManga(currentManga) },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = tokens.primary,
+                            contentColor = tokens.onPrimary
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Read Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(Modifier.width(16.dp))
+
+                // Left & Right Arrow Controls for manual navigation
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = tokens.surfaceContainer.copy(alpha = 0.8f),
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .border(1.dp, tokens.borderGlass, CircleShape)
+                            .clickable {
+                                currentIndex = if (currentIndex > 0) currentIndex - 1 else items.lastIndex
+                                resetTick++
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(Icons.Rounded.ChevronLeft, contentDescription = "Previous", tint = tokens.textPrimary, modifier = Modifier.size(20.dp))
+                        }
+                    }
+
+                    Surface(
+                        color = tokens.surfaceContainer.copy(alpha = 0.8f),
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .border(1.dp, tokens.borderGlass, CircleShape)
+                            .clickable {
+                                currentIndex = (currentIndex + 1) % items.size
+                                resetTick++
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(Icons.Rounded.ChevronRight, contentDescription = "Next", tint = tokens.textPrimary, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+
+            // Dots indicator at bottom center
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items.indices.forEach { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(width = if (index == currentIndex) 14.dp else 4.dp, height = 4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (index == currentIndex) tokens.primary else tokens.textMuted.copy(alpha = 0.35f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun PinnedSourceBadge(
+    sourceItem: ExploreSourceItem,
+    onClick: () -> Unit,
+    onUnpin: () -> Unit,
+) {
+    val tokens = LocalGlassTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    var showContextMenu by remember { mutableStateOf(false) }
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.05f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    Box {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .width(82.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clip(RoundedCornerShape(14.dp))
+                .hoverable(interaction)
+                .onPointerEvent(PointerEventType.Press) { event ->
+                    if (event.button == PointerButton.Secondary) {
+                        showContextMenu = true
+                    }
+                }
+                .clickable(onClick = onClick)
+                .padding(4.dp)
+        ) {
+            Surface(
+                color = if (hovered) tokens.primaryContainer else tokens.surfaceContainerHigh,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .size(64.dp)
+                    .border(
+                        width = if (hovered) 2.dp else 1.dp,
+                        color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .shadow(
+                        elevation = if (hovered) 6.dp else 1.dp,
+                        shape = RoundedCornerShape(16.dp),
+                        spotColor = tokens.primary
+                    )
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(10.dp)) {
+                    RemoteCoverImage(
+                        url = sourceItem.iconUrl,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text = sourceItem.name,
+                color = tokens.textPrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // Right-Click Context Menu to Unpin from Explore
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false },
+            modifier = Modifier
+                .background(tokens.surfaceContainerHigh)
+                .border(1.dp, tokens.borderGlass, RoundedCornerShape(8.dp))
+        ) {
+            DropdownMenuItem(
+                text = { Text("Remove from Explore", color = tokens.textPrimary, fontSize = 13.sp) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Rounded.PushPin,
+                        contentDescription = null,
+                        tint = tokens.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                onClick = {
+                    showContextMenu = false
+                    onUnpin()
+                }
+            )
         }
     }
 }
@@ -693,7 +1103,7 @@ private fun ModernExploreActionButton(
         color = if (hovered) tokens.surfaceContainerHigh else tokens.surfaceContainer,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
-            .height(44.dp)
+            .height(42.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -724,87 +1134,6 @@ private fun ModernExploreActionButton(
                 color = if (hovered) tokens.primary else tokens.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModernKotatsuSourceBadge(
-    parser: MangaParserSource,
-    sourceRegistry: LiveSourceRegistry,
-    onClick: () -> Unit,
-) {
-    val tokens = LocalGlassTokens.current
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-
-    val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.05f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-    )
-
-    val iconUrl = remember(parser) { sourceRegistry.getParserSourceFaviconUrl(parser) }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(84.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(RoundedCornerShape(14.dp))
-            .hoverable(interaction)
-            .clickable(onClick = onClick)
-            .padding(4.dp)
-    ) {
-        Surface(
-            color = if (hovered) tokens.primaryContainer else tokens.surfaceContainerHigh,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .size(68.dp)
-                .border(
-                    width = if (hovered) 2.dp else 1.dp,
-                    color = if (hovered) tokens.primary else tokens.outlineVariant.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                .shadow(
-                    elevation = if (hovered) 6.dp else 1.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    spotColor = tokens.primary
-                )
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(10.dp)) {
-                RemoteCoverImage(
-                    url = iconUrl,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(44.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.PushPin,
-                contentDescription = null,
-                tint = tokens.primary.copy(alpha = 0.8f),
-                modifier = Modifier.size(10.dp)
-            )
-            Spacer(Modifier.width(3.dp))
-            Text(
-                text = parser.title,
-                color = tokens.textPrimary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -868,10 +1197,4 @@ fun ModernMangaCard(
             overflow = TextOverflow.Ellipsis
         )
     }
-}
-
-// Backward-compatible alias for KotatsuMangaCard
-@Composable
-fun KotatsuMangaCard(manga: Manga, onClick: () -> Unit) {
-    ModernMangaCard(manga, onClick)
 }

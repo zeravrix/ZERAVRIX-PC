@@ -47,23 +47,54 @@ class LibraryStore(private val root: Path) {
     }
 
     @Synchronized fun listHistory(): List<Manga> {
-        val historyMap = mutableMapOf<String, Manga>()
+        val historyMap = mutableMapOf<String, Pair<Manga, Long>>()
         if (Files.exists(historyDir)) {
             Files.list(historyDir).use { stream ->
                 stream.filter { it.fileName.toString().endsWith(".properties") }
                     .forEach { file ->
-                        runCatching { readManga(file) }.getOrNull()?.let {
-                            historyMap[it.id] = it
+                        runCatching {
+                            val p = Properties()
+                            Files.newInputStream(file).use { p.load(it) }
+                            val manga = readMangaFromProps(p)
+                            val accessed = p.getProperty("lastAccessed", "0").toLongOrNull() ?: 0L
+                            historyMap[manga.id] = manga to accessed
                         }
                     }
             }
         }
         list().forEach { manga ->
-            if (latestProgress(manga.id) != null) {
-                historyMap.putIfAbsent(manga.id, manga)
+            val prog = latestProgress(manga.id)
+            if (prog != null) {
+                val existing = historyMap[manga.id]
+                if (existing == null || prog.updatedAt > existing.second) {
+                    historyMap[manga.id] = manga to prog.updatedAt
+                }
             }
         }
-        return historyMap.values.toList()
+        return historyMap.values
+            .sortedByDescending { it.second }
+            .map { it.first }
+    }
+
+    @Synchronized fun removeHistory(mangaId: String) {
+        Files.deleteIfExists(historyFile(mangaId))
+        Files.deleteIfExists(latestProgressFile(mangaId))
+        val prefix = safe(mangaId) + "_"
+        if (Files.exists(progressDir)) {
+            Files.list(progressDir).use { stream ->
+                stream.filter { it.fileName.toString().startsWith(prefix) }
+                    .forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    @Synchronized fun clearHistory() {
+        if (Files.exists(historyDir)) {
+            Files.list(historyDir).use { stream ->
+                stream.filter { it.fileName.toString().endsWith(".properties") }
+                    .forEach { Files.deleteIfExists(it) }
+            }
+        }
     }
 
     @Synchronized fun contains(mangaId: String): Boolean = Files.exists(mangaFile(mangaId))
@@ -164,48 +195,56 @@ class LibraryStore(private val root: Path) {
             setProperty("updatedAt", progress.updatedAt.toString())
         }
         Files.newOutputStream(progressFile(progress.mangaId, progress.chapterId)).use { p.store(it, "ZERAVRIX reading progress") }
+        Files.newOutputStream(latestProgressFile(progress.mangaId)).use { p.store(it, "ZERAVRIX latest reading progress") }
     }
 
-    @Synchronized fun latestProgressSnapshot(mangaIds: Set<String>): Map<String, ReadingProgress> = Files.list(progressDir).use { stream ->
-        stream.filter { it.fileName.toString().endsWith(".properties") }
-            .toList()
-            .mapNotNull { file ->
-                runCatching {
-                    val p = Properties()
-                    Files.newInputStream(file).use { p.load(it) }
-                    val mangaId = p.getProperty("mangaId") ?: return@runCatching null
-                    if (mangaId !in mangaIds) null else mangaId to ReadingProgress(
-                        mangaId,
-                        p.getProperty("chapterId", ""),
-                        p.getProperty("pageIndex", "0").toIntOrNull() ?: 0,
-                        p.getProperty("chapterNumber")?.toFloatOrNull(),
-                        p.getProperty("updatedAt", "0").toLongOrNull() ?: 0L,
-                    )
-                }.getOrNull()
-            }
-            .groupBy({ it.first }, { it.second })
-            .mapValues { (_, values) -> values.maxBy { it.updatedAt } }
+    @Synchronized fun latestProgressSnapshot(mangaIds: Set<String>): Map<String, ReadingProgress> {
+        val out = mutableMapOf<String, ReadingProgress>()
+        mangaIds.forEach { id ->
+            latestProgress(id)?.let { out[id] = it }
+        }
+        return out
     }
 
     @Synchronized fun cachedChapterSnapshot(mangaIds: Set<String>): Map<String, List<Chapter>> = mangaIds.associateWith { cachedChapters(it) }
 
-    @Synchronized fun latestProgress(mangaId: String): ReadingProgress? = Files.list(progressDir).use { stream ->
-        stream.filter { it.fileName.toString().endsWith(".properties") }
-            .toList()
-            .mapNotNull { file ->
-                runCatching {
-                    val p = Properties()
-                    Files.newInputStream(file).use { p.load(it) }
-                    if (p.getProperty("mangaId") != mangaId) null else ReadingProgress(
-                        p.getProperty("mangaId", mangaId),
-                        p.getProperty("chapterId", ""),
-                        p.getProperty("pageIndex", "0").toIntOrNull() ?: 0,
-                        p.getProperty("chapterNumber")?.toFloatOrNull(),
-                        p.getProperty("updatedAt", "0").toLongOrNull() ?: 0L,
-                    )
-                }.getOrNull()
-            }
-            .maxByOrNull { it.updatedAt }
+    @Synchronized fun latestProgress(mangaId: String): ReadingProgress? {
+        val latestFile = latestProgressFile(mangaId)
+        if (Files.exists(latestFile)) {
+            val prog = runCatching {
+                val p = Properties()
+                Files.newInputStream(latestFile).use { p.load(it) }
+                ReadingProgress(
+                    p.getProperty("mangaId", mangaId),
+                    p.getProperty("chapterId", ""),
+                    p.getProperty("pageIndex", "0").toIntOrNull() ?: 0,
+                    p.getProperty("chapterNumber")?.toFloatOrNull(),
+                    p.getProperty("updatedAt", "0").toLongOrNull() ?: 0L,
+                )
+            }.getOrNull()
+            if (prog != null && prog.chapterId.isNotBlank()) return prog
+        }
+
+        val prefix = safe(mangaId) + "_"
+        if (!Files.exists(progressDir)) return null
+        return Files.list(progressDir).use { stream ->
+            stream.filter { it.fileName.toString().startsWith(prefix) && it.fileName.toString().endsWith(".properties") }
+                .toList()
+                .mapNotNull { file ->
+                    runCatching {
+                        val p = Properties()
+                        Files.newInputStream(file).use { p.load(it) }
+                        ReadingProgress(
+                            p.getProperty("mangaId", mangaId),
+                            p.getProperty("chapterId", ""),
+                            p.getProperty("pageIndex", "0").toIntOrNull() ?: 0,
+                            p.getProperty("chapterNumber")?.toFloatOrNull(),
+                            p.getProperty("updatedAt", "0").toLongOrNull() ?: 0L,
+                        )
+                    }.getOrNull()
+                }
+                .maxByOrNull { it.updatedAt }
+        }
     }
 
     @Synchronized fun readProgress(mangaId: String, chapterId: String): ReadingProgress? {
@@ -222,9 +261,7 @@ class LibraryStore(private val root: Path) {
         )
     }
 
-    private fun readManga(file: Path): Manga {
-        val p = Properties()
-        Files.newInputStream(file).use { p.load(it) }
+    private fun readMangaFromProps(p: Properties): Manga {
         return Manga(
             id = p.getProperty("id"), title = p.getProperty("title", ""),
             coverUrl = p.getProperty("coverUrl").takeUnless { it.isNullOrBlank() },
@@ -238,8 +275,14 @@ class LibraryStore(private val root: Path) {
         )
     }
 
+    private fun readManga(file: Path): Manga {
+        val p = Properties()
+        Files.newInputStream(file).use { p.load(it) }
+        return readMangaFromProps(p)
+    }
+
     private fun safe(value: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(StandardCharsets.UTF_8))
+        .digest(value.trim().trimEnd('/').toByteArray(StandardCharsets.UTF_8))
         .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     private fun mangaFile(id: String) = libraryDir.resolve("${safe(id)}.properties")
     private fun historyFile(id: String) = historyDir.resolve("${safe(id)}.properties")
@@ -248,5 +291,9 @@ class LibraryStore(private val root: Path) {
         val mangaPart = safe(mangaId)
         val chapterPart = safe(chapterId)
         return progressDir.resolve("${mangaPart}_${chapterPart}.properties")
+    }
+    private fun latestProgressFile(mangaId: String): Path {
+        val mangaPart = safe(mangaId)
+        return progressDir.resolve("${mangaPart}_latest.properties")
     }
 }

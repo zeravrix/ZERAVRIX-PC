@@ -47,36 +47,36 @@ fun ZSearchBar(
     onSubmit: () -> Unit = {},
 ) {
     val tokens = LocalGlassTokens.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(12.dp)
 
     Surface(
         color = tokens.surfaceCard,
         shape = shape,
         modifier = modifier
-            .height(48.dp)
+            .height(38.dp)
             .border(1.dp, tokens.borderGlass, shape)
-            .shadow(elevation = 4.dp, shape = shape, spotColor = tokens.primaryGlow),
+            .shadow(elevation = 2.dp, shape = shape, spotColor = tokens.primaryGlow),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = Icons.Rounded.Search,
                 contentDescription = "Search",
                 tint = tokens.primary,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (query.isEmpty()) {
-                    Text(hint, color = tokens.textMuted, fontSize = 14.sp)
+                    Text(hint, color = tokens.textMuted, fontSize = 13.sp)
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    textStyle = TextStyle(color = tokens.textPrimary, fontSize = 14.sp),
+                    textStyle = TextStyle(color = tokens.textPrimary, fontSize = 13.sp),
                     cursorBrush = SolidColor(tokens.primary),
                     modifier = Modifier
                         .fillMaxWidth()

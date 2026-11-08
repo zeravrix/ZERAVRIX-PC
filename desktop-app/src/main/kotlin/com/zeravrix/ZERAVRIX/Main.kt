@@ -10,8 +10,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,10 +29,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -118,6 +127,17 @@ fun main() = application {
     var activeMangaForDetail by remember { mutableStateOf<Manga?>(null) }
     var activeReader by remember { mutableStateOf<ActiveReaderSession?>(null) }
     var shelfRefresh by remember { mutableIntStateOf(0) }
+    var latestReadPair by remember { mutableStateOf<Pair<Manga, ReadingProgress>?>(null) }
+
+    LaunchedEffect(shelfRefresh, activeReader) {
+        withContext(Dispatchers.IO) {
+            val allHistory = libraryStore.listHistory()
+            val latest = allHistory.firstNotNullOfOrNull { m ->
+                libraryStore.latestProgress(m.id)?.let { m to it }
+            }
+            latestReadPair = latest
+        }
+    }
 
     // Fast Startup Loading Screen states
     var isAppReady by remember { mutableStateOf(false) }
@@ -172,24 +192,28 @@ fun main() = application {
                     manga = manga,
                     chapter = chapter,
                     pages = pages,
-                    initialPage = startPage
+                    initialPage = startPage.coerceIn(0, pages.lastIndex)
                 )
             }
         }
     }
 
-    // Helper: Resume reading
+    // Helper: Resume reading from exact saved position
     fun resumeLastRead() {
         scope.launch {
-            val allHistory = libraryStore.listHistory()
-            val progressMap = allHistory.mapNotNull { m -> libraryStore.latestProgress(m.id)?.let { m to it } }
-            val latest = progressMap.maxByOrNull { it.second.updatedAt }
-            if (latest != null) {
-                val (manga, progress) = latest
+            val pair = latestReadPair ?: withContext(Dispatchers.IO) {
+                val allHistory = libraryStore.listHistory()
+                allHistory.firstNotNullOfOrNull { m ->
+                    libraryStore.latestProgress(m.id)?.let { m to it }
+                }
+            }
+            if (pair != null) {
+                val (manga, progress) = pair
                 val chapters = sourceRegistry.fetchChapters(manga)
                 val targetChapter = chapters.firstOrNull { it.id == progress.chapterId } ?: chapters.firstOrNull()
                 if (targetChapter != null) {
-                    openChapter(manga, targetChapter, progress.pageIndex)
+                    val safePage = progress.pageIndex.coerceAtLeast(0)
+                    openChapter(manga, targetChapter, safePage)
                 }
             }
         }
@@ -290,9 +314,7 @@ fun main() = application {
                                     onScreenSelect = { screen ->
                                         activeMangaForDetail = null
                                         currentScreen = screen
-                                    },
-                                    onResumeReading = ::resumeLastRead,
-                                    hasResumeTarget = true
+                                    }
                                 )
 
                                 // Screen Content View
@@ -349,7 +371,24 @@ fun main() = application {
                                                 settings = it
                                                 settingsStore.save(it)
                                             },
-                                            onClearCache = clearCache
+                                            onClearCache = clearCache,
+                                            onClearHistory = {
+                                                libraryStore.clearHistory()
+                                                shelfRefresh++
+                                            }
+                                        )
+                                    }
+
+                                    // Prominent Floating Continue Reading Button at Bottom-Right
+                                    if (latestReadPair != null && currentScreen != AppNavScreen.SETTINGS) {
+                                        val (manga, progress) = latestReadPair!!
+                                        FloatingContinueReadingButton(
+                                            manga = manga,
+                                            progress = progress,
+                                            onClick = ::resumeLastRead,
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(end = 24.dp, bottom = 24.dp)
                                         )
                                     }
                                 }
@@ -428,7 +467,7 @@ private fun StartupSplashScreen(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = "v1.6.0 • Native Windows Edition",
+                text = "Native Windows Edition",
                 color = tokens.primary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -464,4 +503,75 @@ private fun StartupSplashScreen(
             )
         }
     }
+}
+
+@Composable
+private fun FloatingContinueReadingButton(
+    manga: Manga,
+    progress: ReadingProgress,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tokens = LocalGlassTokens.current
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (hovered) 1.04f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+    )
+
+    Surface(
+        color = tokens.primary,
+        contentColor = tokens.onPrimary,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = if (hovered) 12.dp else 6.dp,
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(20.dp))
+            .hoverable(interaction)
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.PlayArrow,
+                contentDescription = "Continue Reading",
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = "Continue: ${manga.title}",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 240.dp)
+                )
+                val chapterNumber = progress.chapterNumber
+                val pageText = if (progress.pageIndex > 0) "Page ${progress.pageIndex + 1}" else ""
+                val chapterText = if (chapterNumber != null) "Chapter ${numberText(chapterNumber)}" else ""
+                val subText = listOf(chapterText, pageText).filter { it.isNotBlank() }.joinToString(" • ")
+                if (subText.isNotBlank()) {
+                    Text(
+                        text = subText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = tokens.onPrimary.copy(alpha = 0.85f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun numberText(value: Float?): String {
+    if (value == null) return ""
+    return if (value % 1f == 0f) value.toInt().toString() else value.toString()
 }

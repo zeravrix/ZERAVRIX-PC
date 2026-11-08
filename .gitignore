@@ -15,4 +15,5 @@ jvm-host/build/
 *.zip
 *.exe
 *.msi
+graphify-out/
 
