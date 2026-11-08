@@ -30,6 +30,7 @@ import com.zeravrix.zeravrix.theme.LocalGlassTokens
 enum class AppNavScreen(val id: String, val icon: String, val title: String) {
     HISTORY("history", "🕒", "History"),
     FAVOURITES("favourites", "♥", "Favourites"),
+    DOWNLOADS("downloads", "⬇", "Downloads"),
     EXPLORE("explore", "🧭", "Explore"),
     FEED("feed", "📰", "Feed"),
     SETTINGS("settings", "⚙", "Settings");
@@ -38,7 +39,6 @@ enum class AppNavScreen(val id: String, val icon: String, val title: String) {
     companion object {
         val LIBRARY = FAVOURITES
         val LATEST = EXPLORE
-        val DOWNLOADS = EXPLORE
         val MUSIC = SETTINGS
     }
 }

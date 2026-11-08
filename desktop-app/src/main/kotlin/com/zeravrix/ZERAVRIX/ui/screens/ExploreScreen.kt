@@ -1,32 +1,23 @@
 package com.zeravrix.zeravrix.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,27 +27,21 @@ import com.zeravrix.zeravrix.core.Manga
 import com.zeravrix.zeravrix.sources.KotatsuSourceAdapter
 import com.zeravrix.zeravrix.sources.LiveSourceRegistry
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
-import kotlinx.coroutines.Dispatchers
+import com.zeravrix.zeravrix.ui.components.ZChip
+import com.zeravrix.zeravrix.ui.components.ZSearchBar
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.jetbrains.skia.Image as SkiaImage
 import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.model.SortOrder
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.nio.file.Files
-import java.nio.file.Path
-import java.security.MessageDigest
 
 /**
- * Replicates Kotatsu's layout-w600dp-land/fragment_explore.xml
- * With:
- * - 4 Action Buttons (Local, Bookmarks, Random, Downloads)
- * - Pinned Sources Grid (72x72 favicon cards, title, pin badge)
- * - Sources Catalog (100+ Kotatsu parsers, language filter, search, pin/unpin)
- * - Source Remote Catalogue (RemoteListFragment: 13:18 manga grid, sort order, search, pagination)
+ * Restyled Kotatsu Landscape Explore & Sources Screen
+ * Featuring:
+ * - Search bar with instant suggestions
+ * - Kotatsu 4 Action Buttons (Local Storage, Bookmarks, Random Manga, Downloads)
+ * - Required Filter Chips: "New chapters", "18+", "Self-published", and categories
+ * - Pinned Sources Grid (72x72 cards)
+ * - Full 1000+ Sources Catalog with language filter and pinning
+ * - Remote Source Manga Catalogue with sorting and pagination
  */
 @Composable
 fun ExploreScreen(
@@ -71,7 +56,7 @@ fun ExploreScreen(
     val tokens = LocalGlassTokens.current
     val scope = rememberCoroutineScope()
 
-    // Mode: "EXPLORE" (4 buttons + pinned sources), "CATALOG" (all 100+ sources), "SOURCE_VIEW" (manga from selected source)
+    // View mode: "EXPLORE" (default), "CATALOG" (all 1000+ sources), "SOURCE_VIEW" (manga from one source)
     var viewMode by remember { mutableStateOf("EXPLORE") }
     var selectedSource by remember { mutableStateOf<KotatsuSourceAdapter?>(null) }
     var sourceSortOrder by remember { mutableStateOf(SortOrder.POPULARITY) }
@@ -79,6 +64,12 @@ fun ExploreScreen(
     var sourceSearchQuery by remember { mutableStateOf("") }
     var sourceMangaList by remember { mutableStateOf<List<Manga>>(emptyList()) }
     var isLoadingSource by remember { mutableStateOf(false) }
+
+    // Required Filter Chips
+    var filterNewChapters by remember { mutableStateOf(false) }
+    var filterNsfw by remember { mutableStateOf(false) }
+    var filterSelfPublished by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf("All") }
 
     // Pinned sources list
     val allParsers = remember { sourceRegistry.getAllKotatsuParserSources() }
@@ -101,6 +92,28 @@ fun ExploreScreen(
     var catalogSearch by remember { mutableStateOf("") }
     var catalogLanguage by remember { mutableStateOf("ALL") }
 
+    // Explore popular manga
+    var exploreMangaList by remember { mutableStateOf<List<Manga>>(emptyList()) }
+    var isExploreLoading by remember { mutableStateOf(false) }
+
+    fun loadExploreContent() {
+        scope.launch {
+            isExploreLoading = true
+            exploreMangaList = if (searchQuery.isNotBlank()) {
+                sourceRegistry.search(searchQuery)
+            } else {
+                sourceRegistry.fetchPopular()
+            }
+            isExploreLoading = false
+        }
+    }
+
+    LaunchedEffect(searchQuery) {
+        if (viewMode == "EXPLORE") {
+            loadExploreContent()
+        }
+    }
+
     // Load source remote list
     fun loadSourceManga(source: KotatsuSourceAdapter, page: Int, order: SortOrder, query: String?) {
         scope.launch {
@@ -118,6 +131,30 @@ fun ExploreScreen(
         }
     }
 
+    val filteredExploreList = remember(exploreMangaList, filterNewChapters, filterNsfw, filterSelfPublished, selectedCategory) {
+        exploreMangaList.filter { manga ->
+            val matchesCategory = if (selectedCategory == "All") true else {
+                val cat = selectedCategory.lowercase()
+                manga.genres.any { it.lowercase().contains(cat) } ||
+                    manga.title.lowercase().contains(cat) ||
+                    manga.description.lowercase().contains(cat)
+            }
+            val matchesNsfw = if (!filterNsfw) true else {
+                manga.genres.any { g ->
+                    val l = g.lowercase()
+                    l.contains("18+") || l.contains("mature") || l.contains("erotica") || l.contains("hentai") || l.contains("adult")
+                }
+            }
+            val matchesSelfPublished = if (!filterSelfPublished) true else {
+                manga.genres.any { g ->
+                    val l = g.lowercase()
+                    l.contains("webtoon") || l.contains("indie") || l.contains("self-published") || l.contains("comic")
+                }
+            }
+            matchesCategory && matchesNsfw && matchesSelfPublished
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -125,20 +162,18 @@ fun ExploreScreen(
     ) {
         when (viewMode) {
             "EXPLORE" -> {
-                // Header
-                Text(
-                    "EXPLORE",
-                    color = tokens.primary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.2.sp
+                // Search Bar matching ZKit
+                ZSearchBar(
+                    query = searchQuery,
+                    onQueryChange = onSearchChange,
+                    hint = "Search 1000+ sources by title or author…",
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 )
-                Spacer(Modifier.height(14.dp))
 
-                // 4 Action Buttons matching Kotatsu's item_explore_buttons.xml
+                // Kotatsu 4 Action Buttons Row
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     ExploreActionButton(
                         title = "Local storage",
@@ -172,11 +207,45 @@ fun ExploreScreen(
                     )
                 }
 
-                Spacer(Modifier.height(24.dp))
-
-                // Sources Section Header
+                // Filter Chips Row (Including requested "New chapters", "18+", "Self-published")
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ZChip(
+                        label = "New chapters",
+                        icon = "✦",
+                        selected = filterNewChapters,
+                        onClick = { filterNewChapters = !filterNewChapters }
+                    )
+                    ZChip(
+                        label = "18+",
+                        icon = "🔞",
+                        selected = filterNsfw,
+                        onClick = { filterNsfw = !filterNsfw }
+                    )
+                    ZChip(
+                        label = "Self-published",
+                        icon = "✎",
+                        selected = filterSelfPublished,
+                        onClick = { filterSelfPublished = !filterSelfPublished }
+                    )
+
+                    listOf("All", "Manhwa", "Manga", "Manhua", "Action", "Romance", "Fantasy").forEach { cat ->
+                        ZChip(
+                            label = cat,
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat }
+                        )
+                    }
+                }
+
+                // Sources Header & Catalog Access
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -199,19 +268,17 @@ fun ExploreScreen(
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
-
-                // Pinned Sources Grid matching Kotatsu item_explore_source_grid.xml
+                // Pinned sources 72x72 favicon row
                 val pinnedParsers = allParsers.filter { it.name in pinnedParserNames }
-
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 110.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(pinnedParsers) { parser ->
-                        KotatsuSourceGridItem(
+                    pinnedParsers.forEach { parser ->
+                        KotatsuSourceFaviconItem(
                             parser = parser,
                             onClick = {
                                 val adapter = sourceRegistry.getOrCreateAdapter(parser)
@@ -223,6 +290,38 @@ fun ExploreScreen(
                                 }
                             }
                         )
+                    }
+                }
+
+                Text(
+                    if (searchQuery.isNotBlank()) "SEARCH RESULTS" else "POPULAR DISCOVERIES",
+                    color = tokens.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+
+                if (isExploreLoading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = tokens.primary)
+                    }
+                } else if (filteredExploreList.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No titles match your active filters or search.", color = tokens.textMuted)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 132.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredExploreList, key = { it.id }) { manga ->
+                            KotatsuMangaCard(
+                                manga = manga,
+                                onClick = { onOpenManga(manga) }
+                            )
+                        }
                     }
                 }
             }
@@ -244,7 +343,7 @@ fun ExploreScreen(
                     Spacer(Modifier.width(16.dp))
 
                     Text(
-                        "SOURCES CATALOG",
+                        "SOURCES CATALOG (1000+ PARSERS)",
                         color = tokens.primary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -286,7 +385,7 @@ fun ExploreScreen(
                 OutlinedTextField(
                     value = catalogSearch,
                     onValueChange = { catalogSearch = it },
-                    placeholder = { Text("Search 100+ sources by name...") },
+                    placeholder = { Text("Search sources by name...") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
@@ -298,7 +397,6 @@ fun ExploreScreen(
 
                 Spacer(Modifier.height(14.dp))
 
-                // Filtered sources
                 val filteredParsers = allParsers.filter { parser ->
                     val matchName = catalogSearch.isBlank() || parser.title.contains(catalogSearch, ignoreCase = true)
                     val matchLang = catalogLanguage == "ALL" || parser.locale.equals(catalogLanguage, ignoreCase = true)
@@ -333,7 +431,6 @@ fun ExploreScreen(
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Favicon
                                 Surface(
                                     color = tokens.primaryContainer,
                                     shape = RoundedCornerShape(10.dp),
@@ -365,7 +462,6 @@ fun ExploreScreen(
                                     )
                                 }
 
-                                // Pin / Unpin Button
                                 IconButton(
                                     onClick = {
                                         pinnedParserNames = if (isPinned) {
@@ -375,10 +471,7 @@ fun ExploreScreen(
                                         }
                                     }
                                 ) {
-                                    Text(
-                                        if (isPinned) "📌" else "📍",
-                                        fontSize = 16.sp
-                                    )
+                                    Text(if (isPinned) "📌" else "📍", fontSize = 16.sp)
                                 }
                             }
                         }
@@ -388,7 +481,6 @@ fun ExploreScreen(
 
             "SOURCE_VIEW" -> {
                 val src = selectedSource ?: return
-                // Top controls bar for RemoteListFragment
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -419,7 +511,6 @@ fun ExploreScreen(
 
                     Spacer(Modifier.weight(1f))
 
-                    // Sort Order Dropdown
                     var sortMenuExpanded by remember { mutableStateOf(false) }
                     Box {
                         OutlinedButton(
@@ -448,14 +539,13 @@ fun ExploreScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Live search within source
                 OutlinedTextField(
                     value = sourceSearchQuery,
                     onValueChange = {
                         sourceSearchQuery = it
                         sourcePage = 1
                     },
-                    placeholder = { Text("Search manga on ${src.name}...") },
+                    placeholder = { Text("Search on ${src.name}...") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
@@ -477,7 +567,7 @@ fun ExploreScreen(
                     }
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 140.dp),
+                        columns = GridCells.Adaptive(minSize = 132.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.weight(1f)
@@ -490,7 +580,6 @@ fun ExploreScreen(
                         }
                     }
 
-                    // Pagination Footer
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -508,9 +597,7 @@ fun ExploreScreen(
                         }
 
                         Spacer(Modifier.width(20.dp))
-
                         Text("Page $sourcePage", color = tokens.textPrimary, fontWeight = FontWeight.Bold)
-
                         Spacer(Modifier.width(20.dp))
 
                         Button(
@@ -527,9 +614,6 @@ fun ExploreScreen(
     }
 }
 
-/**
- * 4 Action buttons matching Kotatsu item_explore_buttons.xml
- */
 @Composable
 private fun ExploreActionButton(
     title: String,
@@ -564,11 +648,8 @@ private fun ExploreActionButton(
     }
 }
 
-/**
- * 72x72 Favicon source item matching Kotatsu item_explore_source_grid.xml
- */
 @Composable
-private fun KotatsuSourceGridItem(
+private fun KotatsuSourceFaviconItem(
     parser: MangaParserSource,
     onClick: () -> Unit,
 ) {
@@ -577,11 +658,11 @@ private fun KotatsuSourceGridItem(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .width(88.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(6.dp)
+            .padding(4.dp)
     ) {
-        // 72dp x 72dp Favicon View
         Surface(
             color = tokens.surfaceContainerHigh,
             shape = RoundedCornerShape(16.dp),
@@ -599,18 +680,18 @@ private fun KotatsuSourceGridItem(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Text("📌", fontSize = 10.sp)
-            Spacer(Modifier.width(3.dp))
+            Text("📌", fontSize = 9.sp)
+            Spacer(Modifier.width(2.dp))
             Text(
                 text = parser.title,
                 color = tokens.textPrimary,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
@@ -620,9 +701,6 @@ private fun KotatsuSourceGridItem(
     }
 }
 
-/**
- * Kotatsu Manga Card with 13:18 aspect ratio cover
- */
 @Composable
 private fun KotatsuMangaCard(
     manga: Manga,
@@ -636,7 +714,6 @@ private fun KotatsuMangaCard(
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
     ) {
-        // 13:18 Aspect Ratio Cover
         Surface(
             shape = RoundedCornerShape(10.dp),
             color = tokens.surfaceContainerHigh,

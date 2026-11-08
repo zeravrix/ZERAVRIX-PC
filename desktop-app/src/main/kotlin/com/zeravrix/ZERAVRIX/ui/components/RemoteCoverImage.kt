@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zeravrix.zeravrix.core.ChapterArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image as SkiaImage
@@ -69,25 +70,43 @@ fun RemoteCoverImage(
 
         withContext(Dispatchers.IO) {
             runCatching {
-                val hashed = hashUrl(url)
-                val cachedFile = cacheDir.resolve(hashed)
+                val bytes: ByteArray? = when {
+                    url.startsWith("jar:") -> {
+                        // CBZ archive page URL e.g. jar:file:///.../chapter.cbz!/0000.jpg
+                        val jarUriString = url.substringAfter("jar:").substringBefore("!/")
+                        val entryName = url.substringAfter("!/")
+                        val archivePath = Path.of(URI.create(jarUriString))
+                        ChapterArchive.readEntry(archivePath, entryName)
+                    }
+                    url.startsWith("file:") -> {
+                        val filePath = Path.of(URI.create(url))
+                        if (Files.exists(filePath)) Files.readAllBytes(filePath) else null
+                    }
+                    runCatching { Files.exists(Path.of(url)) }.getOrDefault(false) -> {
+                        Files.readAllBytes(Path.of(url))
+                    }
+                    else -> {
+                        val hashed = hashUrl(url)
+                        val cachedFile = cacheDir.resolve(hashed)
 
-                val bytes = if (Files.exists(cachedFile) && Files.size(cachedFile) > 0) {
-                    Files.readAllBytes(cachedFile)
-                } else {
-                    val request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                        .timeout(Duration.ofSeconds(15))
-                        .GET()
-                        .build()
+                        if (Files.exists(cachedFile) && Files.size(cachedFile) > 0) {
+                            Files.readAllBytes(cachedFile)
+                        } else {
+                            val request = HttpRequest.newBuilder()
+                                .uri(URI.create(url))
+                                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                                .timeout(Duration.ofSeconds(15))
+                                .GET()
+                                .build()
 
-                    val response = imageHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
-                    if (response.statusCode() in 200..299) {
-                        val body = response.body()
-                        runCatching { Files.write(cachedFile, body) }
-                        body
-                    } else null
+                            val response = imageHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray())
+                            if (response.statusCode() in 200..299) {
+                                val body = response.body()
+                                runCatching { Files.write(cachedFile, body) }
+                                body
+                            } else null
+                        }
+                    }
                 }
 
                 if (bytes != null && bytes.isNotEmpty()) {

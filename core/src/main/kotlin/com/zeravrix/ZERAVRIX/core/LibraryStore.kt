@@ -11,11 +11,13 @@ class LibraryStore(private val root: Path) {
     private val libraryDir = root.resolve("library")
     private val progressDir = root.resolve("progress")
     private val chapterCacheDir = root.resolve("chapter-cache")
+    private val historyDir = root.resolve("history")
 
     init {
         Files.createDirectories(libraryDir)
         Files.createDirectories(progressDir)
         Files.createDirectories(chapterCacheDir)
+        Files.createDirectories(historyDir)
     }
 
     @Synchronized fun list(): List<Manga> = Files.list(libraryDir).use { stream ->
@@ -24,6 +26,43 @@ class LibraryStore(private val root: Path) {
             .toList()
             .filterNotNull()
             .sortedBy { it.title.lowercase() }
+    }
+
+    @Synchronized fun recordHistory(manga: Manga) {
+        val p = Properties().apply {
+            setProperty("id", manga.id)
+            setProperty("title", manga.title)
+            setProperty("coverUrl", manga.coverUrl.orEmpty())
+            setProperty("description", manga.description)
+            setProperty("sourceId", manga.sourceId.toString())
+            setProperty("author", manga.author.orEmpty())
+            setProperty("artist", manga.artist.orEmpty())
+            setProperty("genres", manga.genres.joinToString("|"))
+            setProperty("status", manga.status.orEmpty())
+            manga.cachedChapterCount?.let { setProperty("cachedChapterCount", it.toString()) }
+            setProperty("lastAccessed", System.currentTimeMillis().toString())
+        }
+        Files.newOutputStream(historyFile(manga.id)).use { p.store(it, "ZERAVRIX reading history") }
+    }
+
+    @Synchronized fun listHistory(): List<Manga> {
+        val historyMap = mutableMapOf<String, Manga>()
+        if (Files.exists(historyDir)) {
+            Files.list(historyDir).use { stream ->
+                stream.filter { it.fileName.toString().endsWith(".properties") }
+                    .forEach { file ->
+                        runCatching { readManga(file) }.getOrNull()?.let {
+                            historyMap[it.id] = it
+                        }
+                    }
+            }
+        }
+        list().forEach { manga ->
+            if (latestProgress(manga.id) != null) {
+                historyMap.putIfAbsent(manga.id, manga)
+            }
+        }
+        return historyMap.values.toList()
     }
 
     @Synchronized fun contains(mangaId: String): Boolean = Files.exists(mangaFile(mangaId))
@@ -200,6 +239,7 @@ class LibraryStore(private val root: Path) {
         .digest(value.toByteArray(StandardCharsets.UTF_8))
         .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     private fun mangaFile(id: String) = libraryDir.resolve("${safe(id)}.properties")
+    private fun historyFile(id: String) = historyDir.resolve("${safe(id)}.properties")
     private fun chapterCacheFile(mangaId: String) = chapterCacheDir.resolve("${safe(mangaId)}.properties")
     private fun progressFile(mangaId: String, chapterId: String): Path {
         val mangaPart = safe(mangaId)

@@ -24,15 +24,17 @@ import com.zeravrix.zeravrix.theme.createGlassTokens
 import com.zeravrix.zeravrix.theme.createMaterialColorScheme
 import com.zeravrix.zeravrix.ui.components.AppNavScreen
 import com.zeravrix.zeravrix.ui.components.AppNavigationRail
-import com.zeravrix.zeravrix.ui.components.DetailsSplitPane
 import com.zeravrix.zeravrix.ui.components.WindowChrome
-import com.zeravrix.zeravrix.ui.reader.PcReaderScreen
+import com.zeravrix.zeravrix.ui.reader.DesktopReaderView
+import com.zeravrix.zeravrix.ui.screens.DetailsScreen
 import com.zeravrix.zeravrix.ui.screens.ExploreScreen
 import com.zeravrix.zeravrix.ui.screens.FeedScreen
-import com.zeravrix.zeravrix.ui.screens.LibraryScreen
+import com.zeravrix.zeravrix.ui.screens.MangaShelfScreen
 import com.zeravrix.zeravrix.ui.screens.SettingsScreen
+import com.zeravrix.zeravrix.ui.screens.ShelfKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image as SkiaImage
 import java.nio.file.Files
 import java.nio.file.Path
@@ -92,12 +94,14 @@ fun main() = application {
     var settings by remember { mutableStateOf(settingsStore.load()) }
     val libraryStore = remember { LibraryStore(appDir) }
     val sourceRegistry = remember { LiveSourceRegistry(appDir, loaderContext) }
+    val downloader = remember { DesktopDownloader(appDir) }
 
     val scope = rememberCoroutineScope()
     var currentScreen by remember { mutableStateOf(AppNavScreen.EXPLORE) }
     var searchQuery by remember { mutableStateOf("") }
     var activeMangaForDetail by remember { mutableStateOf<Manga?>(null) }
     var activeReader by remember { mutableStateOf<ActiveReaderSession?>(null) }
+    var shelfRefresh by remember { mutableIntStateOf(0) }
 
     val appIcon = remember { loadAppIconPainter() }
     val windowState = rememberWindowState(
@@ -111,26 +115,53 @@ fun main() = application {
 
     val isRtl = settings.language == AppLanguage.ARABIC
 
+    // Helper: Open chapter with CBZ detection
+    fun openChapter(manga: Manga, chapter: Chapter, startPage: Int) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                libraryStore.recordHistory(manga)
+            }
+            // Check if downloaded as CBZ
+            val downloaded = downloader.downloadedChapters(manga.id).firstOrNull { it.chapterId == chapter.id }
+            val pages = if (downloaded != null) {
+                downloader.localPages(downloaded)
+            } else {
+                sourceRegistry.fetchPages(chapter)
+            }
+            if (pages.isNotEmpty()) {
+                activeReader = ActiveReaderSession(
+                    manga = manga,
+                    chapter = chapter,
+                    pages = pages,
+                    initialPage = startPage
+                )
+            }
+        }
+    }
+
     // Helper: Resume reading
     fun resumeLastRead() {
         scope.launch {
-            val allSaved = libraryStore.list()
-            val progressMap = allSaved.mapNotNull { m -> libraryStore.latestProgress(m.id)?.let { m to it } }
+            val allHistory = libraryStore.listHistory()
+            val progressMap = allHistory.mapNotNull { m -> libraryStore.latestProgress(m.id)?.let { m to it } }
             val latest = progressMap.maxByOrNull { it.second.updatedAt }
             if (latest != null) {
                 val (manga, progress) = latest
                 val chapters = sourceRegistry.fetchChapters(manga)
                 val targetChapter = chapters.firstOrNull { it.id == progress.chapterId } ?: chapters.firstOrNull()
                 if (targetChapter != null) {
-                    val pages = sourceRegistry.fetchPages(targetChapter)
-                    if (pages.isNotEmpty()) {
-                        activeReader = ActiveReaderSession(
-                            manga = manga,
-                            chapter = targetChapter,
-                            pages = pages,
-                            initialPage = progress.pageIndex
-                        )
-                    }
+                    openChapter(manga, targetChapter, progress.pageIndex)
+                }
+            }
+        }
+    }
+
+    val clearCache: () -> Unit = {
+        runCatching {
+            val cacheDir = appDir.resolve("cache")
+            if (Files.exists(cacheDir)) {
+                Files.walk(cacheDir).use { walk ->
+                    walk.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.delete(it) } }
                 }
             }
         }
@@ -164,7 +195,10 @@ fun main() = application {
                         windowState = windowState,
                         currentScreenTitle = currentScreen.title,
                         searchQuery = searchQuery,
-                        onSearchClick = { currentScreen = AppNavScreen.EXPLORE },
+                        onSearchClick = {
+                            activeMangaForDetail = null
+                            currentScreen = AppNavScreen.EXPLORE
+                        },
                         onClose = ::exitApplication,
                         readerActive = activeReader != null,
                         onReaderToggle = { /* focus reader */ }
@@ -173,13 +207,16 @@ fun main() = application {
                     // Main App Workspace, Split-Pane Details, or Native PC Reader
                     if (activeReader != null) {
                         val session = activeReader!!
-                        PcReaderScreen(
+                        DesktopReaderView(
                             mangaTitle = session.manga.title,
                             chapterTitle = session.chapter.title,
                             pages = session.pages,
                             initialPage = session.initialPage,
-                            loaderContext = loaderContext,
-                            onBack = { activeReader = null },
+                            initialMode = settings.readerMode,
+                            onClose = {
+                                activeReader = null
+                                shelfRefresh++
+                            },
                             onPageChanged = { pageIndex ->
                                 libraryStore.saveProgress(
                                     ReadingProgress(
@@ -194,39 +231,26 @@ fun main() = application {
                         )
                     } else if (activeMangaForDetail != null) {
                         val detailManga = activeMangaForDetail!!
-                        DetailsSplitPane(
+                        DetailsScreen(
                             manga = detailManga,
-                            isFavourite = libraryStore.list().any { it.id == detailManga.id },
-                            onToggleFavourite = { m ->
-                                if (libraryStore.list().any { it.id == m.id }) {
-                                    libraryStore.remove(m.id)
-                                } else {
-                                    libraryStore.add(m)
-                                }
-                            },
-                            onOpenChapter = { m, chapter ->
-                                scope.launch {
-                                    val pages = sourceRegistry.fetchPages(chapter)
-                                    if (pages.isNotEmpty()) {
-                                        activeReader = ActiveReaderSession(
-                                            manga = m,
-                                            chapter = chapter,
-                                            pages = pages,
-                                            initialPage = 0
-                                        )
-                                    }
-                                }
-                            },
                             sourceRegistry = sourceRegistry,
-                            loaderContext = loaderContext,
-                            onBack = { activeMangaForDetail = null }
+                            libraryStore = libraryStore,
+                            downloader = downloader,
+                            onBack = {
+                                activeMangaForDetail = null
+                                shelfRefresh++
+                            },
+                            onRead = { chapter, startPage -> openChapter(detailManga, chapter, startPage) }
                         )
                     } else {
                         Row(modifier = Modifier.fillMaxSize()) {
                             // Left Navigation Rail (Kotatsu layout-w600dp-land/activity_main.xml)
                             AppNavigationRail(
                                 currentScreen = currentScreen,
-                                onScreenSelect = { screen -> currentScreen = screen },
+                                onScreenSelect = { screen ->
+                                    activeMangaForDetail = null
+                                    currentScreen = screen
+                                },
                                 onResumeReading = ::resumeLastRead,
                                 hasResumeTarget = true
                             )
@@ -234,52 +258,31 @@ fun main() = application {
                             // Screen Content View
                             Box(modifier = Modifier.fillMaxSize()) {
                                 when (currentScreen) {
-                                    AppNavScreen.HISTORY -> LibraryScreen(
+                                    AppNavScreen.HISTORY -> MangaShelfScreen(
+                                        kind = ShelfKind.HISTORY,
                                         libraryStore = libraryStore,
+                                        downloader = downloader,
                                         onOpenManga = { manga -> activeMangaForDetail = manga },
-                                        onResumeReading = { manga, progress ->
-                                            scope.launch {
-                                                val chapters = sourceRegistry.fetchChapters(manga)
-                                                val targetChapter = chapters.firstOrNull { it.id == progress.chapterId }
-                                                    ?: chapters.firstOrNull()
-                                                if (targetChapter != null) {
-                                                    val pages = sourceRegistry.fetchPages(targetChapter)
-                                                    if (pages.isNotEmpty()) {
-                                                        activeReader = ActiveReaderSession(
-                                                            manga = manga,
-                                                            chapter = targetChapter,
-                                                            pages = pages,
-                                                            initialPage = progress.pageIndex
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onExploreClick = { currentScreen = AppNavScreen.EXPLORE }
+                                        onExploreClick = { currentScreen = AppNavScreen.EXPLORE },
+                                        refreshKey = shelfRefresh
                                     )
 
-                                    AppNavScreen.FAVOURITES -> LibraryScreen(
+                                    AppNavScreen.FAVOURITES -> MangaShelfScreen(
+                                        kind = ShelfKind.FAVOURITES,
                                         libraryStore = libraryStore,
+                                        downloader = downloader,
                                         onOpenManga = { manga -> activeMangaForDetail = manga },
-                                        onResumeReading = { manga, progress ->
-                                            scope.launch {
-                                                val chapters = sourceRegistry.fetchChapters(manga)
-                                                val targetChapter = chapters.firstOrNull { it.id == progress.chapterId }
-                                                    ?: chapters.firstOrNull()
-                                                if (targetChapter != null) {
-                                                    val pages = sourceRegistry.fetchPages(targetChapter)
-                                                    if (pages.isNotEmpty()) {
-                                                        activeReader = ActiveReaderSession(
-                                                            manga = manga,
-                                                            chapter = targetChapter,
-                                                            pages = pages,
-                                                            initialPage = progress.pageIndex
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onExploreClick = { currentScreen = AppNavScreen.EXPLORE }
+                                        onExploreClick = { currentScreen = AppNavScreen.EXPLORE },
+                                        refreshKey = shelfRefresh
+                                    )
+
+                                    AppNavScreen.DOWNLOADS -> MangaShelfScreen(
+                                        kind = ShelfKind.DOWNLOADS,
+                                        libraryStore = libraryStore,
+                                        downloader = downloader,
+                                        onOpenManga = { manga -> activeMangaForDetail = manga },
+                                        onExploreClick = { currentScreen = AppNavScreen.EXPLORE },
+                                        refreshKey = shelfRefresh
                                     )
 
                                     AppNavScreen.EXPLORE -> ExploreScreen(
@@ -288,7 +291,7 @@ fun main() = application {
                                         onSearchChange = { searchQuery = it },
                                         onOpenManga = { manga -> activeMangaForDetail = manga },
                                         onNavigateBookmarks = { currentScreen = AppNavScreen.FAVOURITES },
-                                        onNavigateDownloads = { currentScreen = AppNavScreen.HISTORY },
+                                        onNavigateDownloads = { currentScreen = AppNavScreen.DOWNLOADS },
                                         onNavigateLocal = { currentScreen = AppNavScreen.HISTORY }
                                     )
 
@@ -296,19 +299,7 @@ fun main() = application {
                                         libraryStore = libraryStore,
                                         sourceRegistry = sourceRegistry,
                                         onOpenManga = { manga -> activeMangaForDetail = manga },
-                                        onReadChapter = { manga, chapter ->
-                                            scope.launch {
-                                                val pages = sourceRegistry.fetchPages(chapter)
-                                                if (pages.isNotEmpty()) {
-                                                    activeReader = ActiveReaderSession(
-                                                        manga = manga,
-                                                        chapter = chapter,
-                                                        pages = pages,
-                                                        initialPage = 0
-                                                    )
-                                                }
-                                            }
-                                        },
+                                        onReadChapter = { manga, chapter -> openChapter(manga, chapter, 0) },
                                         onExploreClick = { currentScreen = AppNavScreen.EXPLORE }
                                     )
 
@@ -318,16 +309,7 @@ fun main() = application {
                                             settings = it
                                             settingsStore.save(it)
                                         },
-                                        onClearCache = {
-                                            runCatching {
-                                                val cacheDir = appDir.resolve("cache")
-                                                if (Files.exists(cacheDir)) {
-                                                    Files.walk(cacheDir)
-                                                        .sorted(Comparator.reverseOrder())
-                                                        .forEach { runCatching { Files.delete(it) } }
-                                                }
-                                            }
-                                        }
+                                        onClearCache = clearCache
                                     )
                                 }
                             }
