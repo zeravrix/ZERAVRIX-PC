@@ -87,7 +87,7 @@ class SettingsStore(private val root: Path) {
             isAmoled = properties.getProperty("isAmoled", "false").toBoolean(),
             language = runCatching { AppLanguage.valueOf(properties.getProperty("language", AppLanguage.ENGLISH.name)) }.getOrDefault(AppLanguage.ENGLISH),
             readerMode = runCatching { ReaderModePreference.valueOf(properties.getProperty("readerMode", ReaderModePreference.VERTICAL.name)) }.getOrDefault(ReaderModePreference.VERTICAL),
-            nsfwEnabled = properties.getProperty("nsfwEnabled", "false").toBoolean(),
+            nsfwEnabled = false,
             minimizeToTray = properties.getProperty("minimizeToTray", "false").toBoolean(),
             refreshOnOpen = properties.getProperty("refreshOnOpen", "false").toBoolean(),
             refreshIntervalHours = properties.getProperty("refreshIntervalHours", "12").toIntOrNull()?.coerceIn(1, 168) ?: 12,
@@ -119,7 +119,7 @@ class SettingsStore(private val root: Path) {
             setProperty("language", settings.language.name)
             setProperty("readerMode", settings.readerMode.name)
             setProperty("readingDirection", settings.readingDirection)
-            setProperty("nsfwEnabled", settings.nsfwEnabled.toString())
+            setProperty("nsfwEnabled", "false")
             setProperty("minimizeToTray", settings.minimizeToTray.toString())
             setProperty("refreshOnOpen", settings.refreshOnOpen.toString())
             setProperty("refreshIntervalHours", settings.refreshIntervalHours.toString())

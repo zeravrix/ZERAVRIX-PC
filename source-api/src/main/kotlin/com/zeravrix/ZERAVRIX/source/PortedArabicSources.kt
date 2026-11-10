@@ -191,54 +191,6 @@ abstract class MadaraPortedSource(id: Long, name: String, baseUrl: String) : Por
 class MangalekMihonSource : MadaraPortedSource(0x4D414E47414C454BL, "Mangalek", "https://mangalik.net")
 class MangaSparkMihonSource : MadaraPortedSource(0x535041524B4152L, "MangaSpark", "https://sparkmanga.net")
 
-class ArabsHentaiMihonSource : PortedHtmlSource(0x415241425348454EL, "Arabs Hentai", "https://arabshentai.com") {
-    override suspend fun popular(page: Int): MangaPageResult = archive(page, "new-manga")
-    override suspend fun latest(page: Int): MangaPageResult = archive(page, "new-chapter")
-    override suspend fun search(page: Int, query: String): MangaPageResult {
-        val document = page("$baseUrl/page/${page.coerceAtLeast(1)}/?s=${URLEncoder.encode(query.trim(), StandardCharsets.UTF_8)}")
-        val items = document.select(".search-page .result-item article:not(:has(.tvshows))").mapNotNull(::cardToManga).distinctBy { it.id }
-        return MangaPageResult(items, document.selectFirst(".pagination span.current + a") != null)
-    }
-
-    private suspend fun archive(pageNumber: Int, order: String): MangaPageResult {
-        val document = page("$baseUrl/manga/page/${pageNumber.coerceAtLeast(1)}/?orderby=$order")
-        val items = document.select("#archive-content .wp-manga").mapNotNull(::cardToManga).distinctBy { it.id }
-        return MangaPageResult(items, document.selectFirst(".pagination a.arrow_pag i#nextpagination") != null)
-    }
-
-    override suspend fun details(manga: Manga): Manga {
-        val content = page(manga.id).selectFirst(".content") ?: error("Arabs Hentai detail content was not found")
-        val info = content.selectFirst("#manga-info")
-        val statusText = info?.select("div b")?.firstOrNull { it.text().contains("حالة") }?.parent()?.text()
-        val description = info?.select(".wp-content p")?.text().orEmpty()
-        val genres = (info?.select("div b:contains(نوع العمل) + span a")?.toList()?.map { it.text() }.orEmpty() + content.select(".data .sgeneros a").map { it.text() }).distinct()
-        return manga.copy(
-            title = content.selectFirst(".sheader .data h1")?.text()?.trim() ?: manga.title,
-            coverUrl = content.selectFirst(".sheader .poster img")?.imageUrl() ?: manga.coverUrl,
-            description = description,
-            author = info?.select("div b:contains(الكاتب) + span a")?.text(),
-            artist = info?.select("div b:contains(الرسام) + span a")?.text(),
-            genres = genres,
-            status = statusText,
-        )
-    }
-
-    override suspend fun chapters(manga: Manga): List<Chapter> {
-        val document = page(manga.id)
-        return document.select("#chapter-list a[href*='/manga/'], .oneshot-reader .images .image-item a[href$='manga-paged=1']").mapNotNull { link ->
-            val url = link.absUrl("href").substringBefore("?")
-            if (url.isBlank()) return@mapNotNull null
-            val title = link.selectFirst(".chapternum")?.text()?.trim().takeUnless { it.isNullOrBlank() } ?: link.text().trim().ifBlank { "Chapter" }
-            Chapter(url, manga.id, title, parseChapterNumber(title), id)
-        }.distinctBy { it.id }
-    }
-
-    override suspend fun pages(chapter: Chapter): List<MangaPage> {
-        val document = page(chapter.id)
-        return pageImages(document, ".chapter_image img.wp-manga-chapter-img, .reading-content img, img.wp-manga-chapter-img")
-    }
-}
-
 class TeamXMihonSource : PortedHtmlSource(0x5445414D584C, "Team X", "https://olympustaff.com") {
     private fun pageSuffix(page: Int) = if (page > 1) "?page=$page" else ""
 

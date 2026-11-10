@@ -6,6 +6,7 @@ import com.zeravrix.zeravrix.core.MangaPage
 import com.zeravrix.zeravrix.data.DesktopMangaLoaderContext
 import com.zeravrix.zeravrix.source.*
 import kotlinx.coroutines.*
+import org.koitharu.kotatsu.parsers.model.ContentType
 import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -72,13 +73,23 @@ class LiveSourceRegistry(
     private val popularCache = ConcurrentHashMap<Long, List<Manga>>()
     private var globalPopularCache: List<Manga>? = null
 
+    private fun MangaParserSource.isMature(): Boolean {
+        if (this.contentType == ContentType.HENTAI) return true
+        val lowerName = this.name.lowercase()
+        val lowerTitle = this.title.lowercase()
+        return lowerName.contains("hentai") || lowerName.contains("porn") || lowerName.contains("xxx") ||
+               lowerName.contains("adult") || lowerName.contains("erotica") ||
+               lowerTitle.contains("hentai") || lowerTitle.contains("porn") || lowerTitle.contains("xxx") ||
+               lowerTitle.contains("adult") || lowerTitle.contains("erotica") || lowerTitle.contains("18+")
+    }
+
     fun get(id: Long): Source? {
         val existing = sourceMap[id]
         if (existing != null) return existing
         if (loaderContext != null && id >= 10_000L) {
             val ordinal = (id - 10_000L).toInt()
             val parserSource = MangaParserSource.entries.getOrNull(ordinal)
-            if (parserSource != null) {
+            if (parserSource != null && !parserSource.isMature()) {
                 val adapter = KotatsuSourceAdapter(parserSource, loaderContext)
                 sourceMap[id] = adapter
                 return adapter
@@ -88,11 +99,11 @@ class LiveSourceRegistry(
     }
 
     fun getAllKotatsuParserSources(): List<MangaParserSource> {
-        return MangaParserSource.entries.filter { !it.isBroken }
+        return MangaParserSource.entries.filter { !it.isBroken && !it.isMature() }
     }
 
     fun getOrCreateAdapter(parserSource: MangaParserSource): KotatsuSourceAdapter? {
-        if (loaderContext == null) return null
+        if (loaderContext == null || parserSource.isMature()) return null
         val id = 10_000L + parserSource.ordinal
         val existing = sourceMap[id] as? KotatsuSourceAdapter
         if (existing != null) return existing

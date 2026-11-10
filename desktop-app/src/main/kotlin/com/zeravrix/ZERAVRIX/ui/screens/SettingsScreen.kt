@@ -40,7 +40,7 @@ import java.net.URI
 enum class SettingsSection(val title: String, val icon: ImageVector, val subtitle: String) {
     APPEARANCE("Appearance", Icons.Rounded.Palette, "Theme presets, night mode, AMOLED"),
     READER("Reader", Icons.Rounded.MenuBook, "Reading direction, mode, margins"),
-    SOURCES("Sources", Icons.Rounded.Language, "Mature content filters, preferred language"),
+    SOURCES("Sources", Icons.Rounded.Language, "Source management, preferred language"),
     DOWNLOADS("Downloads", Icons.Rounded.Download, "Download threads, storage path"),
     STORAGE("Storage & Cache", Icons.Rounded.Storage, "Image cache cleanup, history"),
     LIBRARY("Library & Backup", Icons.Rounded.Bookmarks, "Auto-refresh, data backup"),
@@ -451,7 +451,7 @@ fun SettingsScreen(
                 }
 
                 SettingsSection.SOURCES -> {
-                    SectionTitle("SOURCES & CONTENT", "Content safety, age ratings, and preferred languages")
+                    SectionTitle("SOURCES & PREFERENCES", "Preferred languages and source catalog configuration")
 
                     Surface(
                         color = tokens.surfaceCard,
@@ -459,15 +459,6 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().border(1.dp, tokens.borderGlass, RoundedCornerShape(12.dp))
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            SettingToggleRow(
-                                title = "Display 18+ Mature Content",
-                                subtitle = "Show adult and mature manga in catalog and search",
-                                checked = settings.nsfwEnabled,
-                                onCheckedChange = { onSettingsChange(settings.copy(nsfwEnabled = it)) }
-                            )
-
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = tokens.borderGlass)
-
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,

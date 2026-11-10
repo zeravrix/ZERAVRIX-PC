@@ -3,7 +3,6 @@ package com.zeravrix.zeravrix.jvmhost
 import com.zeravrix.zeravrix.core.Chapter
 import com.zeravrix.zeravrix.core.Manga
 import com.zeravrix.zeravrix.core.MangaPage
-import com.zeravrix.zeravrix.source.ArabsHentaiMihonSource
 import com.zeravrix.zeravrix.source.AzoraMihonSource
 import com.zeravrix.zeravrix.source.DilarMihonSource
 import com.zeravrix.zeravrix.source.HijalaMihonSource
@@ -224,7 +223,6 @@ private object BuiltInSources {
         MangalekMihonSource(),
         TeamXMihonSource(),
         MangaSwatMihonSource(),
-        ArabsHentaiMihonSource(),
         HijalaMihonSource(root),
         DilarMihonSource(),
         AzoraMihonSource(),

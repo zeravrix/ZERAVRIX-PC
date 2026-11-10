@@ -89,7 +89,7 @@ class KotatsuSourceAdapter(
             val effectiveOrder = if (order in parser.availableSortOrders) order else parser.availableSortOrders.firstOrNull() ?: SortOrder.POPULARITY
             val filter = if (!query.isNullOrBlank()) MangaListFilter(query = query) else MangaListFilter()
             val list = parser.getList(offset = (page - 1) * 20, order = effectiveOrder, filter = filter)
-            val items = list.map { m ->
+            val items = list.filter { it.contentRating != ContentRating.ADULT }.map { m ->
                 val normUrl = normalizeUrl(m.url)
                 val safeM = if (m.url != normUrl) m.copy(url = normUrl) else m
                 globalMangaCache[safeM.id.toString()] = safeM
@@ -106,7 +106,7 @@ class KotatsuSourceAdapter(
             val parser = loaderContext.newParserInstance(parserSource)
             val order = if (SortOrder.UPDATED in parser.availableSortOrders) SortOrder.UPDATED else parser.availableSortOrders.firstOrNull() ?: SortOrder.POPULARITY
             val list = parser.getList(offset = (page - 1) * 20, order = order, filter = MangaListFilter())
-            val items = list.map { m ->
+            val items = list.filter { it.contentRating != ContentRating.ADULT }.map { m ->
                 val normUrl = normalizeUrl(m.url)
                 val safeM = if (m.url != normUrl) m.copy(url = normUrl) else m
                 globalMangaCache[safeM.id.toString()] = safeM
@@ -122,7 +122,7 @@ class KotatsuSourceAdapter(
             val parser = loaderContext.newParserInstance(parserSource)
             val order = if (SortOrder.RELEVANCE in parser.availableSortOrders) SortOrder.RELEVANCE else parser.availableSortOrders.firstOrNull() ?: SortOrder.POPULARITY
             val list = parser.getList(offset = (page - 1) * 20, order = order, filter = MangaListFilter(query = query))
-            val items = list.map { m ->
+            val items = list.filter { it.contentRating != ContentRating.ADULT }.map { m ->
                 val normUrl = normalizeUrl(m.url)
                 val safeM = if (m.url != normUrl) m.copy(url = normUrl) else m
                 globalMangaCache[safeM.id.toString()] = safeM
@@ -137,6 +137,7 @@ class KotatsuSourceAdapter(
             val parser = loaderContext.newParserInstance(parserSource)
             val targetManga = getSafeManga(manga)
             val detailed = parser.getDetails(targetManga)
+            if (detailed.contentRating == ContentRating.ADULT) return@runCatching manga
             globalMangaCache[detailed.id.toString()] = detailed
             detailed.chapters?.forEach { ch ->
                 globalChapterCache[ch.id.toString()] = ch
@@ -150,6 +151,7 @@ class KotatsuSourceAdapter(
             val parser = loaderContext.newParserInstance(parserSource)
             val targetManga = getSafeManga(manga)
             val detailed = parser.getDetails(targetManga)
+            if (detailed.contentRating == ContentRating.ADULT) return@runCatching emptyList()
             globalMangaCache[detailed.id.toString()] = detailed
             detailed.chapters?.forEach { ch ->
                 globalChapterCache[ch.id.toString()] = ch
