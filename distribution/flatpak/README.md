@@ -58,6 +58,33 @@ flatpak-builder --run build-dir org.zeravrix.ZERAVRIX.yml zeravrix
 
 ---
 
+## 📥 Flathub User Commands
+
+Once published on Flathub, users can install, run, and update ZERAVRIX with standard Flatpak commands:
+
+### 1. Download & Install
+```bash
+flatpak install flathub org.zeravrix.ZERAVRIX
+```
+
+### 2. Launch
+```bash
+flatpak run org.zeravrix.ZERAVRIX
+```
+*(Or launch directly from your desktop application launcher / GNOME / KDE menu)*
+
+### 3. Update to the Latest Release
+```bash
+flatpak update org.zeravrix.ZERAVRIX
+```
+
+### 4. Uninstall
+```bash
+flatpak uninstall org.zeravrix.ZERAVRIX
+```
+
+---
+
 ## 🚀 Submitting to Official Flathub
 
 1. **Fork the Flathub Repository**:
