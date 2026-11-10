@@ -6,10 +6,10 @@ This directory contains the production-ready Flatpak manifest and AppStream meta
 
 ## 📁 Package Contents
 
-* `org.zeravrix.ZERAVRIX.yml`: The main Flatpak manifest targeting Freedesktop Runtime 24.08 and OpenJDK 21.
-* `org.zeravrix.ZERAVRIX.metainfo.xml`: Validated AppStream metadata with descriptions, features, screenshots, and OARS content rating.
-* `org.zeravrix.ZERAVRIX.desktop`: Desktop launcher entry for Linux desktop environments (GNOME, KDE Plasma, XFCE).
-* `org.zeravrix.ZERAVRIX.png`: High-resolution 1024x1024 application icon.
+* `io.github.zeravrix.ZERAVRIX.yml`: The main Flatpak manifest targeting Freedesktop Runtime 24.08 and OpenJDK 21.
+* `io.github.zeravrix.ZERAVRIX.metainfo.xml`: Validated AppStream metadata with descriptions, features, screenshots, and OARS content rating.
+* `io.github.zeravrix.ZERAVRIX.desktop`: Desktop launcher entry for Linux desktop environments (GNOME, KDE Plasma, XFCE).
+* `io.github.zeravrix.ZERAVRIX.png`: High-resolution 1024x1024 application icon.
 * `zeravrix-flatpak.sh`: Hardened launcher script with sandbox permissions, Wayland/X11 auto-detection, and OpenGL acceleration.
 * `build-flatpak.sh`: Automated local build and verification script.
 
@@ -53,7 +53,7 @@ chmod +x build-flatpak.sh zeravrix-flatpak.sh
 ./build-flatpak.sh
 
 # Step 3: Run the sandboxed application
-flatpak-builder --run build-dir org.zeravrix.ZERAVRIX.yml zeravrix
+flatpak-builder --run build-dir io.github.zeravrix.ZERAVRIX.yml zeravrix
 ```
 
 ---
@@ -64,23 +64,23 @@ Once published on Flathub, users can install, run, and update ZERAVRIX with stan
 
 ### 1. Download & Install
 ```bash
-flatpak install flathub org.zeravrix.ZERAVRIX
+flatpak install flathub io.github.zeravrix.ZERAVRIX
 ```
 
 ### 2. Launch
 ```bash
-flatpak run org.zeravrix.ZERAVRIX
+flatpak run io.github.zeravrix.ZERAVRIX
 ```
 *(Or launch directly from your desktop application launcher / GNOME / KDE menu)*
 
 ### 3. Update to the Latest Release
 ```bash
-flatpak update org.zeravrix.ZERAVRIX
+flatpak update io.github.zeravrix.ZERAVRIX
 ```
 
 ### 4. Uninstall
 ```bash
-flatpak uninstall org.zeravrix.ZERAVRIX
+flatpak uninstall io.github.zeravrix.ZERAVRIX
 ```
 
 ---
