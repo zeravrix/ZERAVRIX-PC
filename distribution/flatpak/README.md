@@ -1,21 +1,21 @@
-# 📦 ZERAVRIX Flatpak & Flathub Publication Guide
+# 📦 ZERAVRIX Flatpak Packaging Guide
 
-This directory contains the production-ready Flatpak manifest and AppStream metadata for **ZERAVRIX**, prepared according to current [Flathub submission requirements](https://docs.flathub.org/docs/for-app-authors/submission/).
+This directory contains the production-ready Flatpak manifest and AppStream metadata for **ZERAVRIX**.
 
 ---
 
 ## 📁 Package Contents
 
-* `io.github.zeravrix.ZERAVRIX.yml`: The main Flatpak manifest targeting Freedesktop Runtime 24.08 and OpenJDK 21.
-* `io.github.zeravrix.ZERAVRIX.metainfo.xml`: Validated AppStream metadata with descriptions, features, screenshots, and OARS content rating.
-* `io.github.zeravrix.ZERAVRIX.desktop`: Desktop launcher entry for Linux desktop environments (GNOME, KDE Plasma, XFCE).
-* `io.github.zeravrix.ZERAVRIX.png`: High-resolution 1024x1024 application icon.
-* `zeravrix-flatpak.sh`: Hardened launcher script with sandbox permissions, Wayland/X11 auto-detection, and OpenGL acceleration.
+* `io.github.zeravrix.ZERAVRIX-PC.yml`: The main Flatpak manifest targeting Freedesktop Runtime 26.08 and OpenJDK 21.
+* `io.github.zeravrix.ZERAVRIX-PC.metainfo.xml`: Validated AppStream metadata with descriptions, features, screenshots, and OARS content rating.
+* `io.github.zeravrix.ZERAVRIX-PC.desktop`: Desktop launcher entry for Linux desktop environments (GNOME, KDE Plasma, XFCE).
+* `io.github.zeravrix.ZERAVRIX-PC.png`: High-resolution application icon.
+* `zeravrix-flatpak.sh`: Hardened launcher script with sandbox permissions, X11 display socket, and OpenGL acceleration.
 * `build-flatpak.sh`: Automated local build and verification script.
 
 ---
 
-## 🛠️ Testing Locally
+## 🛠️ Building & Running Locally
 
 ### Prerequisites
 
@@ -32,11 +32,10 @@ sudo apt install flatpak flatpak-builder
 sudo pacman -S flatpak flatpak-builder
 ```
 
-Install the required Freedesktop 24.08 runtime and OpenJDK SDK extension:
+Install the required Freedesktop 26.08 runtime and OpenJDK SDK extension:
 
 ```bash
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 org.freedesktop.Sdk.Extension.openjdk21//24.08
+flatpak install org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08 org.freedesktop.Sdk.Extension.openjdk21//26.08
 ```
 
 ### Build & Run
@@ -53,63 +52,13 @@ chmod +x build-flatpak.sh zeravrix-flatpak.sh
 ./build-flatpak.sh
 
 # Step 3: Run the sandboxed application
-flatpak-builder --run build-dir io.github.zeravrix.ZERAVRIX.yml zeravrix
+flatpak-builder --run build-dir io.github.zeravrix.ZERAVRIX-PC.yml zeravrix
 ```
 
----
+### Create Standalone Bundle
 
-## 📥 Flathub User Commands
+To export a standalone `.flatpak` single-file bundle:
 
-Once published on Flathub, users can install, run, and update ZERAVRIX with standard Flatpak commands:
-
-### 1. Download & Install
 ```bash
-flatpak install flathub io.github.zeravrix.ZERAVRIX
+flatpak build-bundle repo ZERAVRIX.flatpak io.github.zeravrix.ZERAVRIX-PC
 ```
-
-### 2. Launch
-```bash
-flatpak run io.github.zeravrix.ZERAVRIX
-```
-*(Or launch directly from your desktop application launcher / GNOME / KDE menu)*
-
-### 3. Update to the Latest Release
-```bash
-flatpak update io.github.zeravrix.ZERAVRIX
-```
-
-### 4. Uninstall
-```bash
-flatpak uninstall io.github.zeravrix.ZERAVRIX
-```
-
----
-
-## 🚀 Submitting to Official Flathub
-
-1. **Fork the Flathub Repository**:
-   Visit [https://github.com/flathub/flathub](https://github.com/flathub/flathub) and click **Fork**.
-
-2. **Create New Branch**:
-   ```bash
-   git clone https://github.com/<your-username>/flathub.git
-   cd flathub
-   git checkout -b add-org.zeravrix.ZERAVRIX
-   ```
-
-3. **Add Application Files**:
-   Create a new directory `org.zeravrix.ZERAVRIX/` and copy the files:
-   - `org.zeravrix.ZERAVRIX.yml`
-   - `org.zeravrix.ZERAVRIX.metainfo.xml`
-   - `org.zeravrix.ZERAVRIX.desktop`
-   - `org.zeravrix.ZERAVRIX.png`
-   - `zeravrix-flatpak.sh`
-
-4. **Verify Metadata**:
-   ```bash
-   appstreamcli validate org.zeravrix.ZERAVRIX.metainfo.xml
-   ```
-
-5. **Open Pull Request**:
-   Commit and push to your fork, then open a Pull Request against `flathub/flathub:new-pr`.
-   The Flathub automated CI builder will test the package on `x86_64` and `aarch64`. Once approved, your application repository `flathub/org.zeravrix.ZERAVRIX` will be created automatically!

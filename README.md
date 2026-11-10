@@ -50,8 +50,8 @@
 - **1000+ Sources & Full Arabic Support:** Instant access to global and Arabic catalogs (MangaSpark, MangaSwat, Team X, Azora, Hijala, 3asq, Komga, Kavita, and more).
 - **Persistent Source Pinning:** Pin preferred sources to the Explore screen with saved state across restarts.
 
-### 📦 Flathub & Flatpak Packaging
-- **Production-Ready Flatpak Manifest:** Fully configured `org.zeravrix.ZERAVRIX.yml` ready for official Flathub submission.
+### 📦 Flatpak Packaging
+- **Production-Ready Flatpak Manifest:** Standalone `org.zeravrix.ZERAVRIX.yml` for Linux packaging.
 - **Bundled OpenJDK 21 & Skia Acceleration:** Sandboxed, safe execution across Fedora, Ubuntu, Arch, and SteamOS without manual dependency installation.
 
 ---
@@ -64,7 +64,7 @@ Visit the [**Latest GitHub Release (v1.7.2)**](https://github.com/zeravrix/ZERAV
 | :--- | :--- | :--- |
 | **Windows 10 / 11** | `ZERAVRIX-1.7.2-Setup.exe` | **Recommended:** Standalone Windows installer with desktop shortcut and Start menu registration |
 | **Windows Portable** | `ZERAVRIX-1.7.2-portable.zip` | No installation required. Extract anywhere and launch `ZERAVRIX.exe` |
-| **Linux (Flatpak / Flathub)** | `org.zeravrix.ZERAVRIX.flatpak` | Sandboxed, dependency-free bundle for all modern Linux distributions |
+| **Linux (Flatpak)** | `org.zeravrix.ZERAVRIX.flatpak` | Sandboxed, dependency-free bundle for all modern Linux distributions |
 | **Linux (Fedora / RHEL RPM)** | `zeravrix-1.7.2-1.x86_64.rpm` | Native RPM package with system launcher and menu integration |
 | **Linux (Tarball Bundle)** | `ZERAVRIX-1.7.2-Linux-Fedora.tar.gz` | Portable Linux bundle with low-RAM G1GC launcher script |
 

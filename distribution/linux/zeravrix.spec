@@ -31,6 +31,6 @@ install -m 644 logo.png %{buildroot}/usr/share/icons/hicolor/256x256/apps/zeravr
 
 %changelog
 * Mon Nov 10 2026 ZERAVRIX Team <contact@zeravrix.pages.dev> - 1.7.2-1
-- Release 1.7.2: strict RAM optimization (<=500MB window preloading), Two-Page mode overhaul, hardware color adjustments (contrast/saturation/brightness), F11 fullscreen, reading history default landing, and Flathub compatibility.
+- Release 1.7.2: strict RAM optimization (<=500MB window preloading), Two-Page mode overhaul, hardware color adjustments (contrast/saturation/brightness), F11 fullscreen, and reading history default landing.
 * Sun Nov 08 2026 ZERAVRIX Team <contact@zeravrix.pages.dev> - 1.7.1-1
 - Release 1.7.1 with seamless continuous multi-chapter reader, memory cache optimization, and in-app updater

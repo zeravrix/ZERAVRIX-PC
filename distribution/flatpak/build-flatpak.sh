@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "=== Building Flatpak using flatpak-builder ==="
 cd "$SCRIPT_DIR"
 mkdir -p build-dir repo
-flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo build-dir io.github.zeravrix.ZERAVRIX.yml
+flatpak-builder --force-clean --user --repo=repo build-dir io.github.zeravrix.ZERAVRIX.yml
 
 echo "=== Flatpak Build Successful ==="
 echo "To test run locally: flatpak-builder --run build-dir io.github.zeravrix.ZERAVRIX.yml zeravrix"
