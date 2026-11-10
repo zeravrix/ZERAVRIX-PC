@@ -1,4 +1,4 @@
-# ZERAVRIX — PC Native Blueprint v5 (build-ready: 1000+ sources, CBZ downloads, reader settings, speed, Antigravity plan)
+# ZERAVRIX — PC Native Blueprint v5 (build-ready: 1000+ sources, CBZ downloads, reader settings, speed)
 ## One document: ZERAVRIX 1.5.0 + Mihon + Kotatsu (+ its parsers library) + manga-api, all read directly
 
 > [!IMPORTANT]
@@ -13,15 +13,15 @@
 > **Limits, stated up front.** Static review only: nothing was compiled or run (no Windows/JDK toolchain here), so all performance numbers are targets until Phase 0 measures a baseline. I read the *structure* of Kotatsu's 1,261 parser files and the full source of the contracts/base classes, not every site parser. Part of Mihon's WebGPU shader pipeline and the tracker OAuth flows were not read (App. C). "Perfect" is not something static reading can prove — this is the most complete *buildable* plan the sources support, with tests (§13) that will tell you when it is wrong.
 
 > [!NOTE]
-> **v5 — PC native only.** The Android project is out of scope. This is the single document to hand to your coding agent (Antigravity): it contains every earlier section (nothing removed) plus five new parts and corrected decisions.
+> **v5 — PC native only.** The Android project is out of scope. This is the single reference document: it contains every earlier section (nothing removed) plus five new parts and corrected decisions.
 > - **§18 The 1000+ sources plan** — real numbers from the Kotatsu parsers snapshot (1,256 listed; ≈ 30 % flagged broken; ≈ 880 working incl. adult, ≈ 650 non-adult), three engines behind one contract, the **GPL-3.0 consequence** and how to keep the Store edition clean.
 > - **§19 Downloads v2** — what Kotatsu, Mihon and your downloader really do (your files are **not** converted to WebP; the slowness is sequential pages, thousands of small files, whole-image string decoding, folder rescans, no queue), and the target: **per-chapter CBZ, stored (no compression), parallel pages, resumable, self-draining queue**.
 > - **§20 Reading settings catalogue** — ~100 settings drawn from Kotatsu's 27 and Mihon's ~45 reader prefs plus PC-only controls, with defaults, scopes and per-title overrides.
 > - **§21 Speed contract** — why Kotatsu/Mihon feel fast and twelve rules + budgets to match them.
-> - **§22 Antigravity plan** — how to run the work, prompts, definition of done; the starter kit (rules, skills, task cards) is delivered with this file.
+> - **§22 Execution guidelines** — how to run the work and definition of done.
 > - Decisions **D7/D8 rewritten, D15–D20 added**, release train, tests, budgets and tickets **Z-200…Z-252** updated.
 >
-> **Honest limits of v5.** Nothing was compiled or run. Source counts come from a script over annotations (±3 %). The kotatsu-parsers adapter, the JS runtime choice, the pack-vs-stream benchmark and every Windows behaviour are **[CHECK]** spikes. Antigravity file conventions come from secondary sources. Licence statements are my reading, not legal advice.
+> **Honest limits of v5.** Nothing was compiled or run. Source counts come from a script over annotations (±3 %). The kotatsu-parsers adapter, the JS runtime choice, the pack-vs-stream benchmark and every Windows behaviour are **[CHECK]** spikes. Licence statements are my reading, not legal advice.
 >
 > **What changed in v4.2 (second review pass).** You asked me to re-read the blueprint and make sure sources, the extension system, overall performance, settings, buttons and choices are professional like Kotatsu and Mihon. Added: **§7D** settings redesign (two-pane, searchable, one registry, control vocabulary, button rules; 11 findings in today's Settings screen incl. a real colour bug) · **§10.9** Sources screen, per-source settings, "Test source", global search · **§10.10** Extensions screen and store dialogs · **§10.11** extension runtime hardening (host-brokered I/O, watchdog, rollback, conformance kit) · **§9.1** performance engineering (no JVM options set today, recomposition, thumbnail decoding, JVM flag experiments) · **§17** review table · tickets **Z-160…Z-185**, decisions D13-D14, updated release train. Nothing was removed.
 >
@@ -60,7 +60,7 @@
 | **Downloads as CBZ, fast, endless queue** | **§19** |
 | **Reading settings (many, like Kotatsu)** | **§20** |
 | **"Fast like Kotatsu"** | **§21, §9.1** |
-| **How to build it with Antigravity** | **§22** + the starter kit |
+| **Engineering guidelines** | **§22** |
 | **Sources screen / per-source settings / search UI** | **§10.9** |
 | **Extension system: UI + security hardening** | **§10.5, §10.10, §10.11** |
 | **Overall performance (how, not just targets)** | **§9, §9.1** |
@@ -114,7 +114,7 @@
 | D17 | **Downloads: per-chapter CBZ, stored (no compression), original bytes never re-encoded by default**, parallel pages streamed to disk, persisted self-draining queue, in-memory index | §19 |
 | D18 | **One HTTP stack = OkHttp** (already D-chosen in §6.1); the kotatsu adapter reuses it through `MangaLoaderContext` | §6.1, §18.4 |
 | D19 | **Reader settings are registry rows** with app → source → title overrides and saveable reading profiles; ship the core 25 in 1.6, the rest in 1.9 | §20 |
-| D20 | **Agent kit:** `AGENTS.md` under 12,000 characters + short rule files + skills; the blueprint lives in `docs/`; one ticket per agent task | §22 |
+| D20 | **Standard modular architecture:** short rule files + domain skills; the blueprint lives in `docs/`; one ticket per task | §22 |
 
 ### 0.5 First 10 working days
 | Day | Do | Ticket |
@@ -1382,7 +1382,7 @@ flowchart LR
 **Downloads §19:** **Z-210 downloader hot-fix (1.5.x): parallel pages, stream to disk, header-only sniffing, cached index** [S] · Z-211 stored-ZIP CBZ writer + `ComicInfo.xml`/`zeravrix.json` + verifier [M] · **Z-212 benchmark: temp-dir+pack vs streaming-into-ZIP** [S] · Z-213 CBZ reader (random access, stored entries, byte-bounded cache) [M] · Z-214 job model + journal/SQLite queue + scheduler (sources round-robin, caps) [L] · Z-215 retries, `Retry-After`, watchdog, typed failures [M] · Z-216 resume at page level + crash-recovery tests [M] · Z-217 in-memory index + `WatchService` + repair [M] · Z-218 Downloads UI (queue, per-title, speed/ETA, controls) [L] · Z-219 auto-download new + download-ahead + delete-after-read [M] · Z-220 import/export CBZ + folder→CBZ migration job [L] · Z-221 optional "Save space (WebP)" background job [S] · Z-222 bandwidth limit, schedule window, keep-awake [S] · Z-223 settings page (registry) [S] · Z-224 path-safety + long-path tests on Windows [S].
 **Reader settings §20:** Z-230 reader settings schema in the registry (all rows above, defaults, scopes) [M] · Z-231 quick panel + live preview [M] · Z-232 keyboard map + rebinding + conflict detection [M] · Z-233 mouse/touch/pen input + click zones + overlay preview [M] · Z-234 smooth scroll, inertia, auto-scroll [M] · Z-235 crop borders + colour filters + brightness (shader/ColorFilter) [M] · Z-236 double-page/split/rotate logic [L] · Z-237 per-source/per-title overrides + reading profiles [M] · Z-238 chapter flow (auto-next, preload at %, skip read/dupe, mark-read rule) [M] · Z-239 fullscreen/HUD/window options + tests [M].
 **Speed §21:** Z-240 stale-while-revalidate layer (repository returns cached Flow then refreshes) [M] · Z-241 single-flight + priority + cancel in the network layer [M] · Z-242 global memory governor [M] · Z-243 startup trace + lazy init audit [S] · Z-244 benchmark scenarios for the budgets above [M]. (These extend Z-180…Z-184.)
-**Antigravity §22:** Z-250 repo bootstrap from the kit [S] · Z-251 CI: build + test + `verifyNoGplInStore` + perf harness [M] · Z-252 `docs/PROGRESS.md` + release checklist [S].
+**Engineering §22:** Z-250 repo bootstrap [S] · Z-251 CI: build + test + `verifyNoGplInStore` + perf harness [M] · Z-252 `docs/PROGRESS.md` + release checklist [S].
 
 **Order of attack:** 0 → (1 ‖ 2) → **2b** → 3 → 4 → 5 → 6 → 7 → 8. Phases 2b and 3 are independent (different people can run them in parallel); ship 2b first because it needs no SQLite — see the release train below. If you want visible value fastest: **Z-050a + Phase 1** first, then Phase 2b.
 
@@ -1767,52 +1767,18 @@ Kotatsu and Mihon feel fast for a few concrete reasons, and ZERAVRIX can match o
 
 ---
 
-## 22. Building this with Antigravity (how to run the work so it ends well)
+## 22. Project Engineering Guidelines
 
-You will build with Google's **Antigravity** agentic IDE. An AI agent is fast but literal: it needs short standing rules, small tasks with a test that decides "done", and your eyes on the Windows-only parts it cannot check. This section is the operating manual; the **starter kit** delivered with this blueprint contains the files.
+This section describes the engineering standards, test strategy, and release discipline for ZERAVRIX.
 
-### 22.1 What Antigravity reads **[from secondary sources read 2026-11-07 — [CHECK] on your installed version]**
-- **Rules:** `AGENTS.md` or `GEMINI.md` at the project root, or files in **`.agents/rules/`** (older projects use `.agent/rules/`); a global `~/.gemini/GEMINI.md` also applies. **Limit: 12,000 characters per rule file** — so rules must be short; the long material lives in `docs/`.
-- **Skills:** `.agents/skills/<name>/SKILL.md` with a `description` in the front matter; the agent sees only name + description at start and loads the full file when the task matches.
-- **Workflows:** repeatable step lists (same 12,000-character limit); I could not confirm their folder name, so the kit keeps them as plain files in `docs/workflows/` that you paste or reference.
+### 22.1 Architecture Structure
+- **Core models & stores:** `core/` holds domain contracts and local caches.
+- **Desktop shell:** `desktop-app/` holds the Compose Desktop UI, navigation, and window chrome.
+- **Reading engine:** `reader/` handles rendering, scaling, and prefetching.
+- **Sources & extensions:** `source-api/` defines scraping interfaces and built-in catalogs.
 
-### 22.2 The kit (what is in the zip)
-```text
-AGENTS.md                         ← the standing rules (< 12 000 chars): stack, commands, hard rules, definition of done
-.agents/rules/
-  10-architecture.md              ← module map, dependency direction, edition/licence boundaries
-  20-quality-gates.md             ← tests first, budgets, "never say it works unless a command proved it"
-  30-licensing-security.md        ← GPL/Store separation, secrets, Cloudflare/adult/Spotify limits
-  40-ui-ux.md                     ← design tokens, controls vocabulary, motion, accessibility
-.agents/skills/
-  implement-ticket/SKILL.md       ← the loop: read ticket → plan → test → code → run → report
-  add-source-template/SKILL.md    ← how to add a site to the native template engine with fixtures
-  perf-check/SKILL.md             ← run the harness, compare to budgets, report regressions
-docs/
-  BLUEPRINT.md                    ← this document (the source of truth)
-  EXECUTION_PLAN.md               ← the first 40 tasks as ready-to-paste task cards, in order
-  PROGRESS.md                     ← the agent updates this after each ticket
-  workflows/                      ← new-release, bump-parsers, triage-broken-source
-```
-
-### 22.3 How to work, in order
-1. Create the repo, copy the kit in, commit. Open the folder in Antigravity.
-2. **First task (Phase 0):** paste task card **T-001** from `docs/EXECUTION_PLAN.md`. Do not start features before the baseline builds and the benchmark harness exists.
-3. **One ticket = one agent task = one branch = one commit.** Never ask for "implement section 7" — ask for `Z-0xx`.
-4. After every task: you run the build/tests yourself (or let the agent run them and read the output), then the **Windows checks only you can do** (DPI 125/150/200 %, two monitors, Snap Layouts, sleep/wake, antivirus on the downloads folder).
-5. Keep the agent honest: its report must say **verified (command + result)**, **built but not run**, or **not verified**. Reject "should work".
-6. Ship per the **release train (§14.1)**; tag each release; keep `docs/PROGRESS.md` current.
-7. When the agent proposes something that contradicts the blueprint, it must stop and ask; you decide, then update the blueprint (one line in §15).
-
-### 22.4 Prompt templates
-**Per-ticket:** "Implement ticket **Z-xxx** from `docs/BLUEPRINT.md` §N. First restate the acceptance test in your own words. Write the failing test, then the smallest change that passes it. Run `./gradlew test` and the task's own check, paste the result. Update `docs/PROGRESS.md`. Do not touch anything outside this ticket."
-**Review:** "Review the diff against `docs/BLUEPRINT.md` §N and the rules in `.agents/rules/`. List only real problems: broken acceptance criteria, rule violations, missing tests, thread/memory risks. No style nitpicks."
-**Stuck:** "Stop. Summarise what you tried, the exact error, and two options with trade-offs. Wait for my choice."
-
-### 22.5 Definition of done (every ticket)
-Acceptance test written and passing · no new warning in the build · budgets unaffected (harness run for perf-sensitive tickets) · no hard-coded strings or colours · `PROGRESS.md` updated · diff small enough to review in 10 minutes · Windows-only checks listed for the human.
-
-**Tickets:** Z-250 repo bootstrap from the kit [S] · Z-251 CI: build + test + `verifyNoGplInStore` + perf harness [M] · Z-252 `docs/PROGRESS.md` + release checklist [S].
+### 22.2 Definition of done (every ticket)
+Acceptance test written and passing · no new warning in the build · budgets unaffected · no hard-coded strings or colours · `PROGRESS.md` updated · Windows and Linux verification steps completed.
 
 ---
 
@@ -1868,4 +1834,4 @@ Mirror switcher **keep, redesigned (§6.2)** · DoH **keep, opt-in** · WebView2
 - **v4.1 design pass:** the UI was read from source, not run or screenshotted. Theme seed colours are untuned suggestions — judge them on screen. The U8 music race is read-only evidence (the WAV path is guarded at `MusicStore.kt` L137); write the failing test first. Colour-generation library, tag reader, decoders vs miniaudio, Snap Layouts with a custom caption, Skiko ICO/SVG decoding, Windows accent colour and SMTC/MSIX details are **[CHECK]** spikes (Z-102a, Z-132a, Z-133a, Z-116). Spotify rules (§7C.6) come from secondary sources read on 2026-10-30 (not Spotify's own terms page) and change often — re-read before building.
 - Kotatsu's `Retry-After` HTTP-date mishandling and the suggestions `sortedBy` ordering are from reading the code, not from running it.
 - **v4.2 pass:** settings/sources/extensions designs are specs drawn from reading Mihon/Kotatsu preference structure and your Settings code; none was run. I read Mihon's extension-store code but not every Browse tab. Windows Job Object / AppContainer feasibility for a JVM host, JEP 486 status for your exact JDK, per-host JVM memory cost, G1 periodic GC behaviour, Compose compiler skipping defaults, and whether any sampled image decode already exists beyond the call sites I saw are **[CHECK]** (Z-179, Z-180, Z-181, Z-182).
-- **v5 pass:** source counts are from a script over annotations in the parsers snapshot (±3 %, estimates for "working"); the adapter, JS runtime, GraalJS/Rhino choice, kotatsu-parsers Maven/JitPack coordinates and JDK-8-bytecode loading are **[CHECK]**. Suwayomi's licence/mechanism comes from its README only. Antigravity conventions (rules folder, 12,000-character limit, skills) come from secondary articles dated 2026. **I read your recovered Website-edition downloader (1.5.0); if your newest code converts images to WebP, the §19 plan still applies — don't convert in the download path.** Kotatsu's SINGLE_CBZ failure mode is from reading `cleanup()`, not from running it. GPL/Store/legal points are not legal advice.
+- **v5 pass:** source counts are from a script over annotations in the parsers snapshot (±3 %, estimates for "working"); the adapter, JS runtime, GraalJS/Rhino choice, kotatsu-parsers Maven/JitPack coordinates and JDK-8-bytecode loading are **[CHECK]**. Suwayomi's licence/mechanism comes from its README only. **I read your recovered Website-edition downloader (1.5.0); if your newest code converts images to WebP, the §19 plan still applies — don't convert in the download path.** Kotatsu's SINGLE_CBZ failure mode is from reading `cleanup()`, not from running it. GPL/Store/legal points are not legal advice.
