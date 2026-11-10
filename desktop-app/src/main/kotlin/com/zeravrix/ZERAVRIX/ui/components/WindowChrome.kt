@@ -113,14 +113,6 @@ fun WindowScope.WindowChrome(
                         }
                     }
                 }
-                Spacer(Modifier.width(9.dp))
-                Text(
-                    "ZERAVRIX",
-                    color = tokens.textPrimary,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 13.sp,
-                    letterSpacing = 1.4.sp
-                )
             }
 
             Spacer(Modifier.weight(1f))

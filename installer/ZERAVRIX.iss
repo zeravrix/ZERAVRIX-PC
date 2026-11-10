@@ -1,5 +1,5 @@
 #define MyAppName "ZERAVRIX"
-#define MyAppVersion "1.7.1"
+#define MyAppVersion "1.7.2"
 #define MyAppPublisher "ZERAVRIX"
 #define MyAppURL "https://zeravrix.pages.dev"
 #define MyAppExeName "ZERAVRIX.exe"
@@ -29,7 +29,7 @@ SetupIconFile=logo.ico
 WizardSmallImageFile=logo.bmp
 WizardImageFile=logo.bmp
 DisableProgramGroupPage=yes
-VersionInfoVersion=1.7.1.0
+VersionInfoVersion=1.7.2.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Setup
 VersionInfoProductName={#MyAppName}

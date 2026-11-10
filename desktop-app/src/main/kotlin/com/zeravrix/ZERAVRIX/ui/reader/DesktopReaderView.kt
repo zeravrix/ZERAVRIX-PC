@@ -3,16 +3,13 @@ package com.zeravrix.zeravrix.ui.reader
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -22,34 +19,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.BorderStroke
 import com.zeravrix.zeravrix.core.Chapter
 import com.zeravrix.zeravrix.core.MangaPage
 import com.zeravrix.zeravrix.core.ReaderModePreference
 import com.zeravrix.zeravrix.theme.LocalGlassTokens
 import com.zeravrix.zeravrix.ui.screens.RemoteCoverImage
+import com.zeravrix.zeravrix.ui.screens.preloadPageImage
+import com.zeravrix.zeravrix.ui.screens.pruneMemoryExcept
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-enum class ReaderDirection {
-    LEFT_TO_RIGHT,
-    RIGHT_TO_LEFT
-}
 
 enum class ReaderBgColor(val label: String, val color: Color, val textColor: Color) {
     AMOLED("AMOLED", Color(0xFF000000), Color(0xFFEEEEEE)),
@@ -80,6 +73,7 @@ fun DesktopReaderView(
     initialMode: ReaderModePreference = ReaderModePreference.VERTICAL,
     onFetchPages: suspend (Chapter) -> List<MangaPage> = { emptyList() },
     onClose: () -> Unit,
+    onToggleFullscreen: () -> Unit = {},
     onPageChanged: (chapter: Chapter, pageIndex: Int) -> Unit = { _, _ -> },
 ) {
     val tokens = LocalGlassTokens.current
@@ -92,9 +86,44 @@ fun DesktopReaderView(
     var showSettingsDialog by remember { mutableStateOf(false) }
 
     var readerBg by remember { mutableStateOf(if (tokens.isAmoled) ReaderBgColor.AMOLED else ReaderBgColor.DARK) }
-    var readingDirection by remember { mutableStateOf(ReaderDirection.LEFT_TO_RIGHT) }
     var fitWidth by remember { mutableStateOf(true) }
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
+
+    // Image Adjustment Settings (hardware-accelerated Skia ColorFilter)
+    var contrast by remember { mutableFloatStateOf(1.0f) }
+    var saturation by remember { mutableFloatStateOf(1.0f) }
+    var brightness by remember { mutableFloatStateOf(1.0f) }
+    var invertColors by remember { mutableStateOf(false) }
+
+    val imageColorFilter = remember(contrast, saturation, brightness, invertColors) {
+        if (contrast == 1f && saturation == 1f && brightness == 1f && !invertColors) {
+            null
+        } else {
+            val cm = ColorMatrix()
+            cm.setToSaturation(saturation)
+            if (contrast != 1f || brightness != 1f) {
+                val scale = contrast * brightness
+                val offset = (1f - contrast) * 128f * 0.5f
+                val cm2 = ColorMatrix(floatArrayOf(
+                    scale, 0f, 0f, 0f, offset,
+                    0f, scale, 0f, 0f, offset,
+                    0f, 0f, scale, 0f, offset,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                cm.timesAssign(cm2)
+            }
+            if (invertColors) {
+                val inv = ColorMatrix(floatArrayOf(
+                    -1f, 0f, 0f, 0f, 255f,
+                    0f, -1f, 0f, 0f, 255f,
+                    0f, 0f, -1f, 0f, 255f,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                cm.timesAssign(inv)
+            }
+            ColorFilter.colorMatrix(cm)
+        }
+    }
 
     // Multi-chapter continuous loading state
     val loadedChapters = remember { mutableStateListOf(LoadedChapter(initialChapter, initialPages)) }
@@ -143,34 +172,66 @@ fun DesktopReaderView(
         focusRequester.requestFocus()
     }
 
-    // Infinite Chapter Scroll trigger for Vertical (Webtoon) mode
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val total = listState.layoutInfo.totalItemsCount
-            val lastIdx = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastIdx to total
-        }.collect { (lastIdx, total) ->
-            if (total > 0 && lastIdx >= total - 4 && !isLoadingNextChapter && allChapters.isNotEmpty()) {
-                val lastLoaded = loadedChapters.lastOrNull()?.chapter ?: return@collect
-                val curIdx = allChapters.indexOfFirst { it.id == lastLoaded.id }
-                if (curIdx != -1 && curIdx + 1 < allChapters.size) {
-                    val nextChapter = allChapters[curIdx + 1]
-                    isLoadingNextChapter = true
-                    scope.launch {
-                        val nextPages = withContext(Dispatchers.IO) { onFetchPages(nextChapter) }
-                        if (nextPages.isNotEmpty()) {
-                            loadedChapters.add(LoadedChapter(nextChapter, nextPages))
+    // Intelligent Preload & Memory Window for Continuous Vertical (Webtoon) mode:
+    // Keeps exactly 3 pages behind and preloads 5 pages ahead. When near chapter end, preloads next 5 pages in next chapter.
+    // Automatically releases all memory for pages outside the window.
+    LaunchedEffect(listState.firstVisibleItemIndex, loadedChapters.size, mode) {
+        if (mode == ReaderModePreference.VERTICAL || mode == ReaderModePreference.AUTO) {
+            val total = feedItems.size
+            if (total == 0) return@LaunchedEffect
+            val curIdx = listState.firstVisibleItemIndex
+            val fromIdx = (curIdx - 3).coerceAtLeast(0)
+            val toIdx = (curIdx + 5).coerceAtMost(total - 1)
+
+            val activeUrls = mutableSetOf<String>()
+            for (i in fromIdx..toIdx) {
+                val item = feedItems.getOrNull(i)
+                if (item is ContinuousReaderItem.Page) {
+                    activeUrls.add(item.page.imageUrl)
+                }
+            }
+
+            // Preload 5 pages ahead
+            for (i in curIdx..toIdx) {
+                val item = feedItems.getOrNull(i)
+                if (item is ContinuousReaderItem.Page) {
+                    scope.launch { preloadPageImage(item.page.imageUrl) }
+                }
+            }
+
+            // Check if near the end of the chapter (<= 5 pages left)
+            if (currentPageInChapter >= totalPagesInCurrentChapter - 5 && allChapters.isNotEmpty()) {
+                val lastLoaded = loadedChapters.lastOrNull()?.chapter
+                if (lastLoaded != null) {
+                    val curChapIdx = allChapters.indexOfFirst { it.id == lastLoaded.id }
+                    if (curChapIdx != -1 && curChapIdx + 1 < allChapters.size && !isLoadingNextChapter) {
+                        val nextChapter = allChapters[curChapIdx + 1]
+                        isLoadingNextChapter = true
+                        scope.launch {
+                            val nextPages = withContext(Dispatchers.IO) { onFetchPages(nextChapter) }
+                            if (nextPages.isNotEmpty()) {
+                                loadedChapters.add(LoadedChapter(nextChapter, nextPages))
+                                // Preload first 5 pages of the next chapter
+                                nextPages.take(5).forEach { p ->
+                                    preloadPageImage(p.imageUrl)
+                                }
+                            }
+                            isLoadingNextChapter = false
                         }
-                        isLoadingNextChapter = false
                     }
                 }
+            }
+
+            // Strictly prune bitmaps in RAM outside [curIdx - 3 .. curIdx + 5]
+            if (activeUrls.isNotEmpty()) {
+                pruneMemoryExcept(activeUrls)
             }
         }
     }
 
-    // Active Chapter & Reading Progress Tracking
+    // Active Chapter & Reading Progress Tracking for Continuous Mode
     LaunchedEffect(listState.firstVisibleItemIndex) {
-        if (mode == ReaderModePreference.VERTICAL) {
+        if (mode == ReaderModePreference.VERTICAL || mode == ReaderModePreference.AUTO) {
             val item = feedItems.getOrNull(listState.firstVisibleItemIndex)
             if (item is ContinuousReaderItem.Page) {
                 currentActiveChapter = item.chapter
@@ -181,12 +242,43 @@ fun DesktopReaderView(
         }
     }
 
-    fun advanceSinglePage() {
-        if (singlePageIndex < currentSinglePages.lastIndex) {
-            singlePageIndex++
-            currentPageInChapter = singlePageIndex
-            onPageChanged(currentActiveChapter, singlePageIndex)
-        } else if (allChapters.isNotEmpty() && currentSingleChapterIndex + 1 < allChapters.size && !isLoadingNextChapter) {
+    // Intelligent Preload & Memory Window for Single/Double Page Mode
+    LaunchedEffect(singlePageIndex, currentSinglePages, mode) {
+        if (mode == ReaderModePreference.SINGLE || mode == ReaderModePreference.DOUBLE) {
+            val cur = singlePageIndex
+            val from = (cur - 3).coerceAtLeast(0)
+            val to = (cur + 5).coerceAtMost(currentSinglePages.lastIndex)
+            val activeUrls = mutableSetOf<String>()
+            for (i in from..to) {
+                val p = currentSinglePages.getOrNull(i)
+                if (p != null) activeUrls.add(p.imageUrl)
+            }
+
+            // Preload 5 pages ahead
+            for (i in cur..to) {
+                val p = currentSinglePages.getOrNull(i)
+                if (p != null) {
+                    scope.launch { preloadPageImage(p.imageUrl) }
+                }
+            }
+
+            // Near end of chapter preload next chapter
+            if (cur >= currentSinglePages.size - 5 && allChapters.isNotEmpty() && currentSingleChapterIndex + 1 < allChapters.size) {
+                val nextChap = allChapters[currentSingleChapterIndex + 1]
+                scope.launch {
+                    val nextPages = withContext(Dispatchers.IO) { onFetchPages(nextChap) }
+                    nextPages.take(5).forEach { preloadPageImage(it.imageUrl) }
+                }
+            }
+
+            if (activeUrls.isNotEmpty()) {
+                pruneMemoryExcept(activeUrls)
+            }
+        }
+    }
+
+    fun loadNextChapterForSingle() {
+        if (allChapters.isNotEmpty() && currentSingleChapterIndex + 1 < allChapters.size && !isLoadingNextChapter) {
             val nextChap = allChapters[currentSingleChapterIndex + 1]
             isLoadingNextChapter = true
             scope.launch {
@@ -205,12 +297,8 @@ fun DesktopReaderView(
         }
     }
 
-    fun previousSinglePage() {
-        if (singlePageIndex > 0) {
-            singlePageIndex--
-            currentPageInChapter = singlePageIndex
-            onPageChanged(currentActiveChapter, singlePageIndex)
-        } else if (currentSingleChapterIndex > 0 && !isLoadingNextChapter) {
+    fun loadPrevChapterForSingle() {
+        if (currentSingleChapterIndex > 0 && !isLoadingNextChapter) {
             val prevChap = allChapters[currentSingleChapterIndex - 1]
             isLoadingNextChapter = true
             scope.launch {
@@ -225,6 +313,54 @@ fun DesktopReaderView(
                     onPageChanged(prevChap, pages.lastIndex)
                 }
                 isLoadingNextChapter = false
+            }
+        }
+    }
+
+    fun advancePage() {
+        if (mode == ReaderModePreference.DOUBLE) {
+            if (singlePageIndex + 2 <= currentSinglePages.lastIndex) {
+                singlePageIndex += 2
+                currentPageInChapter = singlePageIndex
+                onPageChanged(currentActiveChapter, singlePageIndex)
+            } else if (singlePageIndex < currentSinglePages.lastIndex) {
+                singlePageIndex = currentSinglePages.lastIndex
+                currentPageInChapter = singlePageIndex
+                onPageChanged(currentActiveChapter, singlePageIndex)
+            } else {
+                loadNextChapterForSingle()
+            }
+        } else {
+            if (singlePageIndex < currentSinglePages.lastIndex) {
+                singlePageIndex++
+                currentPageInChapter = singlePageIndex
+                onPageChanged(currentActiveChapter, singlePageIndex)
+            } else {
+                loadNextChapterForSingle()
+            }
+        }
+    }
+
+    fun previousPage() {
+        if (mode == ReaderModePreference.DOUBLE) {
+            if (singlePageIndex >= 2) {
+                singlePageIndex -= 2
+                currentPageInChapter = singlePageIndex
+                onPageChanged(currentActiveChapter, singlePageIndex)
+            } else if (singlePageIndex > 0) {
+                singlePageIndex = 0
+                currentPageInChapter = 0
+                onPageChanged(currentActiveChapter, 0)
+            } else {
+                loadPrevChapterForSingle()
+            }
+        } else {
+            if (singlePageIndex > 0) {
+                singlePageIndex--
+                currentPageInChapter = singlePageIndex
+                onPageChanged(currentActiveChapter, singlePageIndex)
+            } else {
+                loadPrevChapterForSingle()
             }
         }
     }
@@ -246,38 +382,42 @@ fun DesktopReaderView(
                             }
                             true
                         }
+                        Key.F11 -> {
+                            onToggleFullscreen()
+                            true
+                        }
                         Key.Tab -> {
                             showSettingsDialog = !showSettingsDialog
                             true
                         }
                         Key.Spacebar, Key.DirectionDown, Key.J -> {
-                            if (mode == ReaderModePreference.VERTICAL) {
+                            if (mode == ReaderModePreference.VERTICAL || mode == ReaderModePreference.AUTO) {
                                 scope.launch {
                                     val current = listState.firstVisibleItemIndex
                                     listState.animateScrollToItem((current + 1).coerceAtMost(feedItems.lastIndex.coerceAtLeast(0)))
                                 }
                             } else {
-                                if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) advanceSinglePage() else previousSinglePage()
+                                advancePage()
                             }
                             true
                         }
                         Key.DirectionUp, Key.K -> {
-                            if (mode == ReaderModePreference.VERTICAL) {
+                            if (mode == ReaderModePreference.VERTICAL || mode == ReaderModePreference.AUTO) {
                                 scope.launch {
                                     val current = listState.firstVisibleItemIndex
                                     listState.animateScrollToItem((current - 1).coerceAtLeast(0))
                                 }
                             } else {
-                                if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) previousSinglePage() else advanceSinglePage()
+                                previousPage()
                             }
                             true
                         }
                         Key.DirectionRight, Key.D -> {
-                            if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) advanceSinglePage() else previousSinglePage()
+                            advancePage()
                             true
                         }
                         Key.DirectionLeft, Key.A -> {
-                            if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) previousSinglePage() else advanceSinglePage()
+                            previousPage()
                             true
                         }
                         Key.Plus, Key.Equals, Key.NumPadAdd -> {
@@ -306,6 +446,16 @@ fun DesktopReaderView(
                         zoomScale = (zoomScale - 0.10f).coerceAtLeast(0.4f)
                     }
                     change.consume()
+                } else {
+                    // Smooth wheel scrolling across the entire reader canvas, including gaps and letterboxes
+                    val delta = change.scrollDelta.y
+                    if (mode == ReaderModePreference.VERTICAL || mode == ReaderModePreference.AUTO) {
+                        scope.launch {
+                            listState.scrollBy(delta * 120f)
+                        }
+                    } else {
+                        if (delta > 0) advancePage() else if (delta < 0) previousPage()
+                    }
                 }
             }
             .clickable(
@@ -319,7 +469,7 @@ fun DesktopReaderView(
                 }
             }
     ) {
-        // Reader Content Area with Native Width Scaling (Keeps edge gaps, removes bottom gap, crystal-sharp Skia rendering)
+        // Reader Content Area with Native Width Scaling
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -329,9 +479,7 @@ fun DesktopReaderView(
                     val widthFraction = ((if (fitWidth) 1.0f else 0.85f) * zoomScale.coerceIn(0.30f, 1.0f)).coerceIn(0.20f, 1.0f)
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(widthFraction),
+                        modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         itemsIndexed(
@@ -344,91 +492,92 @@ fun DesktopReaderView(
                                 }
                             }
                         ) { _, item ->
-                            when (item) {
-                                is ContinuousReaderItem.ChapterDivider -> {
-                                    Surface(
-                                        color = tokens.surfaceContainerHigh.copy(alpha = 0.85f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(1.dp, tokens.primary.copy(alpha = 0.35f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 28.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(widthFraction)
+                                    .wrapContentHeight(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                when (item) {
+                                    is ContinuousReaderItem.ChapterDivider -> {
+                                        Surface(
+                                            color = tokens.surfaceContainerHigh.copy(alpha = 0.85f),
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = BorderStroke(1.dp, tokens.primary.copy(alpha = 0.35f)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 24.dp, vertical = 28.dp)
                                         ) {
-                                            Text(
-                                                "CHAPTER ${item.chapterIndex} OF ${item.totalChapters}",
-                                                color = tokens.primary,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                letterSpacing = 1.2.sp
-                                            )
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                item.chapter.title,
-                                                color = tokens.textPrimary,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            Column(
+                                                modifier = Modifier.padding(vertical = 16.dp, horizontal = 20.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Text(
+                                                    "CHAPTER ${item.chapterIndex} OF ${item.totalChapters}",
+                                                    color = tokens.primary,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    letterSpacing = 1.2.sp
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    item.chapter.title,
+                                                    color = tokens.textPrimary,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                                is ContinuousReaderItem.Page -> {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .wrapContentHeight(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    is ContinuousReaderItem.Page -> {
                                         RemoteCoverImage(
                                             url = item.page.imageUrl,
                                             contentScale = ContentScale.FillWidth,
+                                            colorFilter = imageColorFilter,
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .wrapContentHeight()
                                         )
                                     }
-                                }
-                                is ContinuousReaderItem.EndOfManga -> {
-                                    Surface(
-                                        color = tokens.surfaceContainerHigh.copy(alpha = 0.9f),
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, tokens.borderGlass),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 32.dp, vertical = 40.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(24.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
+                                    is ContinuousReaderItem.EndOfManga -> {
+                                        Surface(
+                                            color = tokens.surfaceContainerHigh.copy(alpha = 0.9f),
+                                            shape = RoundedCornerShape(16.dp),
+                                            border = BorderStroke(1.dp, tokens.borderGlass),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 32.dp, vertical = 40.dp)
                                         ) {
-                                            Icon(
-                                                Icons.Rounded.CheckCircle,
-                                                contentDescription = null,
-                                                tint = tokens.primary,
-                                                modifier = Modifier.size(36.dp)
-                                            )
-                                            Spacer(Modifier.height(10.dp))
-                                            Text(
-                                                "You're all caught up!",
-                                                color = tokens.textPrimary,
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                "You've reached the latest page of the latest chapter.",
-                                                color = tokens.textMuted,
-                                                fontSize = 12.sp
-                                            )
-                                            Spacer(Modifier.height(16.dp))
-                                            FilledTonalButton(
-                                                onClick = onClose,
-                                                shape = RoundedCornerShape(10.dp)
+                                            Column(
+                                                modifier = Modifier.padding(24.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
-                                                Text("Close Reader", fontWeight = FontWeight.Bold)
+                                                Icon(
+                                                    Icons.Rounded.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = tokens.primary,
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                                Spacer(Modifier.height(10.dp))
+                                                Text(
+                                                    "You're all caught up!",
+                                                    color = tokens.textPrimary,
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    "You've reached the latest page of the latest chapter.",
+                                                    color = tokens.textMuted,
+                                                    fontSize = 12.sp
+                                                )
+                                                Spacer(Modifier.height(16.dp))
+                                                FilledTonalButton(
+                                                    onClick = onClose,
+                                                    shape = RoundedCornerShape(10.dp)
+                                                ) {
+                                                    Text("Close Reader", fontWeight = FontWeight.Bold)
+                                                }
                                             }
                                         }
                                     }
@@ -462,8 +611,9 @@ fun DesktopReaderView(
                             RemoteCoverImage(
                                 url = currentPage.imageUrl,
                                 contentScale = ContentScale.Fit,
+                                colorFilter = imageColorFilter,
                                 modifier = Modifier
-                                    .fillMaxHeight(zoomScale.coerceIn(0.35f, 1.0f))
+                                    .fillMaxHeight(zoomScale.coerceIn(0.5f, 1.0f))
                                     .wrapContentWidth()
                             )
                         }
@@ -471,32 +621,59 @@ fun DesktopReaderView(
                 }
 
                 ReaderModePreference.DOUBLE -> {
-                    val idx1 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex else singlePageIndex + 1
-                    val idx2 = if (readingDirection == ReaderDirection.LEFT_TO_RIGHT) singlePageIndex + 1 else singlePageIndex
+                    val idx1 = singlePageIndex
+                    val idx2 = singlePageIndex + 1
 
                     val page1 = currentSinglePages.getOrNull(idx1)
                     val page2 = currentSinglePages.getOrNull(idx2)
 
-                    Row(
-                        Modifier
-                            .fillMaxHeight(zoomScale.coerceIn(0.35f, 1.0f))
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (page1 != null) {
-                            RemoteCoverImage(
-                                url = page1.imageUrl,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.weight(1f).fillMaxHeight()
-                            )
-                        }
-                        if (page2 != null) {
-                            RemoteCoverImage(
-                                url = page2.imageUrl,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.weight(1f).fillMaxHeight()
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxHeight(zoomScale.coerceIn(0.5f, 1.0f))
+                                .wrapContentWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (page1 != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f, fill = false)
+                                        .fillMaxHeight(),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    RemoteCoverImage(
+                                        url = page1.imageUrl,
+                                        contentScale = ContentScale.Fit,
+                                        colorFilter = imageColorFilter,
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .wrapContentWidth()
+                                    )
+                                }
+                            }
+                            if (page2 != null) {
+                                Spacer(Modifier.width(8.dp)) // Book spine / center gutter
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f, fill = false)
+                                        .fillMaxHeight(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    RemoteCoverImage(
+                                        url = page2.imageUrl,
+                                        contentScale = ContentScale.Fit,
+                                        colorFilter = imageColorFilter,
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .wrapContentWidth()
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -541,166 +718,158 @@ fun DesktopReaderView(
                             color = tokens.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             currentActiveChapter.title,
                             color = tokens.primary,
                             fontWeight = FontWeight.Medium,
-                            fontSize = 12.sp,
-                            maxLines = 1
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    // Mode toggles
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ModernReaderModeButton(
-                            label = "Strip",
-                            icon = Icons.Rounded.ViewDay,
-                            selected = mode == ReaderModePreference.VERTICAL,
-                            onClick = { mode = ReaderModePreference.VERTICAL }
-                        )
-                        ModernReaderModeButton(
-                            label = "Single",
-                            icon = Icons.Rounded.CropPortrait,
-                            selected = mode == ReaderModePreference.SINGLE,
-                            onClick = { mode = ReaderModePreference.SINGLE }
-                        )
-                        ModernReaderModeButton(
-                            label = "Double",
-                            icon = Icons.Rounded.AutoStories,
-                            selected = mode == ReaderModePreference.DOUBLE,
-                            onClick = { mode = ReaderModePreference.DOUBLE }
-                        )
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
-                    // Zoom Controls Pill
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(tokens.surfaceContainer, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    // Progress indicator
+                    Surface(
+                        color = tokens.surfaceContainer,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp)
                     ) {
-                        IconButton(
-                            onClick = { zoomScale = (zoomScale - 0.15f).coerceAtLeast(0.4f) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Rounded.Remove, contentDescription = "Zoom Out", modifier = Modifier.size(16.dp), tint = tokens.textPrimary)
+                        val progressText = if (mode == ReaderModePreference.DOUBLE && currentPageInChapter + 1 < totalPagesInCurrentChapter) {
+                            "Pages ${currentPageInChapter + 1}-${currentPageInChapter + 2} / $totalPagesInCurrentChapter"
+                        } else {
+                            "Page ${currentPageInChapter + 1} / $totalPagesInCurrentChapter"
                         }
                         Text(
-                            text = "${(zoomScale * 100).toInt()}%",
-                            color = tokens.textPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .clickable { zoomScale = 1.0f }
-                                .padding(horizontal = 4.dp)
+                            progressText,
+                            color = tokens.textMuted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
-                        IconButton(
-                            onClick = { zoomScale = (zoomScale + 0.15f).coerceAtMost(3.0f) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Rounded.Add, contentDescription = "Zoom In", modifier = Modifier.size(16.dp), tint = tokens.textPrimary)
-                        }
                     }
 
-                    Spacer(Modifier.width(10.dp))
-
+                    // Fullscreen Button
                     IconButton(
-                        onClick = { showSettingsDialog = !showSettingsDialog },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(if (showSettingsDialog) tokens.primaryContainer else tokens.surfaceContainer, RoundedCornerShape(10.dp))
+                        onClick = onToggleFullscreen,
+                        modifier = Modifier.size(34.dp)
                     ) {
                         Icon(
-                            Icons.Rounded.Tune,
-                            contentDescription = "Reader Settings",
-                            tint = if (showSettingsDialog) tokens.primary else tokens.textPrimary,
+                            Icons.Rounded.Fullscreen,
+                            contentDescription = "Toggle Fullscreen (F11)",
+                            tint = tokens.textPrimary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    // Settings Dialog Toggle
+                    FilledTonalButton(
+                        onClick = { showSettingsDialog = !showSettingsDialog },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (showSettingsDialog) tokens.primaryContainer else tokens.surfaceContainer,
+                            contentColor = if (showSettingsDialog) tokens.primary else tokens.textPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Rounded.Tune, contentDescription = "Settings", modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Settings", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
 
-        // Floating Bottom Page Slider
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            Surface(
-                color = tokens.surfaceContainerHigh.copy(alpha = 0.94f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        // Floating Bottom Controls for Single/Double Page Mode
+        if (mode != ReaderModePreference.VERTICAL && mode != ReaderModePreference.AUTO) {
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, tokens.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .padding(horizontal = 24.dp, vertical = 10.dp)
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp)
             ) {
-                val currentPageNumber = if (mode == ReaderModePreference.VERTICAL) {
-                    listState.firstVisibleItemIndex + 1
-                } else singlePageIndex + 1
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
+                Surface(
+                    color = tokens.surfaceContainerHigh.copy(alpha = 0.94f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, tokens.outlineVariant.copy(alpha = 0.35f)),
+                    shadowElevation = 8.dp
                 ) {
-                    val pageText = if (mode == ReaderModePreference.VERTICAL) {
-                        "Page ${currentPageInChapter + 1} of $totalPagesInCurrentChapter"
-                    } else {
-                        "Page ${singlePageIndex + 1} of ${currentSinglePages.size}"
-                    }
-                    Text(
-                        pageText,
-                        color = tokens.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            "Press TAB for Reader Settings",
-                            color = tokens.textMuted,
-                            fontSize = 11.sp
-                        )
-                        Surface(
-                            color = tokens.surfaceContainer,
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.border(1.dp, tokens.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { previousPage() },
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text(
-                                "TAB",
-                                color = tokens.primary,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                            Icon(Icons.Rounded.ArrowBack, contentDescription = "Prev", modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Prev", fontSize = 12.sp)
+                        }
+
+                        val curPageLabel = if (mode == ReaderModePreference.DOUBLE && singlePageIndex + 1 < currentSinglePages.size) {
+                            "${singlePageIndex + 1}-${singlePageIndex + 2} / ${currentSinglePages.size}"
+                        } else {
+                            "${singlePageIndex + 1} / ${currentSinglePages.size}"
+                        }
+                        Text(
+                            curPageLabel,
+                            color = tokens.textPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+
+                        FilledTonalButton(
+                            onClick = { advancePage() },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Next", fontSize = 12.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Rounded.ArrowForward, contentDescription = "Next", modifier = Modifier.size(16.dp))
                         }
                     }
                 }
             }
         }
 
-        // Kotatsu-Style Reader Settings Modal (Triggered by TAB or Tune button)
+        // Settings Dialog Card
         AnimatedVisibility(
             visible = showSettingsDialog,
             enter = fadeIn() + scaleIn(spring(stiffness = Spring.StiffnessMediumLow)),
             exit = fadeOut() + scaleOut(),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp)
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 70.dp, end = 24.dp)
         ) {
             KotatsuReaderSettingsCard(
                 mode = mode,
                 onModeChange = { mode = it },
-                direction = readingDirection,
-                onDirectionChange = { readingDirection = it },
                 bgColor = readerBg,
                 onBgColorChange = { readerBg = it },
                 fitWidth = fitWidth,
                 onFitWidthChange = { fitWidth = it },
+                contrast = contrast,
+                onContrastChange = { contrast = it },
+                saturation = saturation,
+                onSaturationChange = { saturation = it },
+                brightness = brightness,
+                onBrightnessChange = { brightness = it },
+                invertColors = invertColors,
+                onInvertColorsChange = { invertColors = it },
+                onResetAdjustments = {
+                    contrast = 1.0f
+                    saturation = 1.0f
+                    brightness = 1.0f
+                    invertColors = false
+                },
                 onClose = { showSettingsDialog = false }
             )
         }
@@ -711,12 +880,19 @@ fun DesktopReaderView(
 private fun KotatsuReaderSettingsCard(
     mode: ReaderModePreference,
     onModeChange: (ReaderModePreference) -> Unit,
-    direction: ReaderDirection,
-    onDirectionChange: (ReaderDirection) -> Unit,
     bgColor: ReaderBgColor,
     onBgColorChange: (ReaderBgColor) -> Unit,
     fitWidth: Boolean,
     onFitWidthChange: (Boolean) -> Unit,
+    contrast: Float,
+    onContrastChange: (Float) -> Unit,
+    saturation: Float,
+    onSaturationChange: (Float) -> Unit,
+    brightness: Float,
+    onBrightnessChange: (Float) -> Unit,
+    invertColors: Boolean,
+    onInvertColorsChange: (Boolean) -> Unit,
+    onResetAdjustments: () -> Unit,
     onClose: () -> Unit
 ) {
     val tokens = LocalGlassTokens.current
@@ -730,7 +906,7 @@ private fun KotatsuReaderSettingsCard(
             .border(1.dp, tokens.primary.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
     ) {
-        Column(modifier = Modifier.padding(22.dp)) {
+        Column(modifier = Modifier.padding(22.dp).verticalScroll(rememberScrollState())) {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -798,33 +974,93 @@ private fun KotatsuReaderSettingsCard(
 
             Spacer(Modifier.height(16.dp))
 
-            // Direction
+            // Image Adjustments Section
             Text(
-                "DIRECTION",
+                "IMAGE ADJUSTMENTS",
                 color = tokens.primary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp
             )
             Spacer(Modifier.height(8.dp))
+
+            // Contrast Slider
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                KotatsuSettingChip(
-                    label = "Left to Right",
-                    icon = Icons.Rounded.ArrowForward,
-                    selected = direction == ReaderDirection.LEFT_TO_RIGHT,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onDirectionChange(ReaderDirection.LEFT_TO_RIGHT) }
-                )
-                KotatsuSettingChip(
-                    label = "Right to Left",
-                    icon = Icons.Rounded.ArrowBack,
-                    selected = direction == ReaderDirection.RIGHT_TO_LEFT,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onDirectionChange(ReaderDirection.RIGHT_TO_LEFT) }
-                )
+                Text("Contrast", color = tokens.textPrimary, fontSize = 12.sp)
+                Text("${(contrast * 100).toInt()}%", color = tokens.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = contrast,
+                onValueChange = onContrastChange,
+                valueRange = 0.5f..1.5f,
+                colors = SliderDefaults.colors(thumbColor = tokens.primary, activeTrackColor = tokens.primary)
+            )
+
+            // Saturation Slider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Saturation", color = tokens.textPrimary, fontSize = 12.sp)
+                Text("${(saturation * 100).toInt()}%", color = tokens.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = saturation,
+                onValueChange = onSaturationChange,
+                valueRange = 0.0f..2.0f,
+                colors = SliderDefaults.colors(thumbColor = tokens.primary, activeTrackColor = tokens.primary)
+            )
+
+            // Brightness Slider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Brightness", color = tokens.textPrimary, fontSize = 12.sp)
+                Text("${(brightness * 100).toInt()}%", color = tokens.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = brightness,
+                onValueChange = onBrightnessChange,
+                valueRange = 0.5f..1.5f,
+                colors = SliderDefaults.colors(thumbColor = tokens.primary, activeTrackColor = tokens.primary)
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onInvertColorsChange(!invertColors) }
+                        .padding(vertical = 4.dp)
+                ) {
+                    Switch(
+                        checked = invertColors,
+                        onCheckedChange = onInvertColorsChange,
+                        colors = SwitchDefaults.colors(checkedThumbColor = tokens.primary, checkedTrackColor = tokens.primaryContainer)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Invert Colors", color = tokens.textPrimary, fontSize = 11.sp)
+                }
+
+                TextButton(
+                    onClick = onResetAdjustments,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text("Reset", color = tokens.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -872,7 +1108,7 @@ private fun KotatsuReaderSettingsCard(
             Spacer(Modifier.height(16.dp))
 
             // Fit width toggle (for webtoon mode)
-            if (mode == ReaderModePreference.VERTICAL) {
+            if (mode == ReaderModePreference.VERTICAL || mode == ReaderModePreference.AUTO) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -911,41 +1147,11 @@ private fun KotatsuReaderSettingsCard(
                     Spacer(Modifier.height(4.dp))
                     Text("• Space / J / Down : Next page / scroll", color = tokens.textPrimary, fontSize = 11.sp)
                     Text("• K / Up : Previous page / scroll", color = tokens.textPrimary, fontSize = 11.sp)
+                    Text("• F11 : Toggle Fullscreen", color = tokens.textPrimary, fontSize = 11.sp)
                     Text("• TAB : Toggle this settings HUD", color = tokens.textPrimary, fontSize = 11.sp)
                     Text("• ESC : Close reader", color = tokens.textPrimary, fontSize = 11.sp)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ModernReaderModeButton(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val tokens = LocalGlassTokens.current
-    Surface(
-        color = if (selected) tokens.primary else tokens.surfaceContainer,
-        contentColor = if (selected) Color.Black else tokens.textPrimary,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                label,
-                fontSize = 11.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-            )
         }
     }
 }

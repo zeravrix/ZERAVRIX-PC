@@ -7,8 +7,8 @@
 **High-Performance Native Manga, Manhua & Manhwa Reader for PC**
 
 [![Official Website](https://img.shields.io/badge/Official%20Website-zeravrix.pages.dev-00D2FF.svg?style=for-the-badge&logo=google-chrome&logoColor=white)](https://zeravrix.pages.dev/)
-[![Latest Release](https://img.shields.io/badge/Release-v1.7.1-10B981.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/zeravrix/ZERAVRIX-PC/releases/tag/v1.7.1)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20%7C%20Linux%20Fedora-0078D6.svg?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/zeravrix/ZERAVRIX-PC/releases)
+[![Latest Release](https://img.shields.io/badge/Release-v1.7.2-10B981.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/zeravrix/ZERAVRIX-PC/releases/tag/v1.7.2)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20%7C%20Linux%20%7C%20Flatpak-0078D6.svg?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/zeravrix/ZERAVRIX-PC/releases)
 [![Language](https://img.shields.io/badge/Language-Kotlin%2097%25-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![UI Framework](https://img.shields.io/badge/UI-Compose%20Desktop%20%2F%20Skia-4285F4.svg?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://github.com/JetBrains/compose-multiplatform)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=for-the-badge)](LICENSE)
@@ -21,51 +21,52 @@
 
 ---
 
-## ✨ Features
+## ✨ Features (v1.7.2)
 
-### 📖 Continuous Multi-Chapter Reader
-- **Seamless Infinite Scroll:** Chapters flow directly into subsequent chapters without stopping, loading screens, or restarting at page 1.
-- **Dynamic Chapter Dividers:** Visual cards notify you when crossing chapter boundaries with progress indicators (`Chapter X of Y`).
-- **End-of-Manga Detection:** Polished completion card notifies you when you are caught up with the latest released chapter.
-- **Multiple Reading Modes:** Continuous Vertical Webtoon Strip, Single Page, Double Page spread, and Automatic Spread matching your window aspect ratio.
-- **Precise Progress Tracking:** Reading progress and exact scroll position are saved automatically per title and preserved across application restarts.
+### ⚡ Intelligent Memory Management & Bounded RAM
+- **Active Window Memory Governor:** Strictly limits decoded in-memory bitmaps to the active reading window (keeping 3 pages behind and preloading 5 pages ahead) to eliminate memory bloat and keep total RAM consumption low.
+- **Automatic Old Chapter Purging:** Pages from previous chapters are automatically evicted from RAM during continuous reading.
+- **500 MB On-Disk Storage Cache:** Compressed web images are persisted in high-speed disk storage up to 500 MB, allowing instant backwards navigation without network fetches or RAM bloat.
+- **Linux Memory Optimization:** G1GC with string deduplication and capped heap options prevents runaway RAM usage.
 
-### 🌐 1000+ Sources & Full Arabic Support
-- **Direct Built-in Scrapers:** Instant access to global and Arabic catalogs (MangaSpark, MangaSwat, Team X, Azora, Hijala, 3asq, Komga, Kavita, and more).
-- **Extension Repository Importer:** Add external Tachiyomi/Mihon and Kotatsu extension indices with one click.
-- **Persistent Source Pinning:** Pin your preferred sources directly to the Explore screen. Pinned selections remain saved across restarts and navigation.
-- **Right-Click Context Menus:** Quick mouse controls to pin/unpin sources from Explore, or remove titles from History and Favorites.
+### 📖 Enhanced Two-Page & Single-Page Reading Modes
+- **Screen Space Optimization:** Two-Page mode now utilizes the full vertical display height with realistic book spine gutters and proper proportions.
+- **Synchronized 2-Page Navigation:** Page turns in two-page mode advance and reverse by pairs without desynchronization.
+- **Odd/Cover Page Handling:** Single cover pages and chapter ends are cleanly centered.
 
-### ⚡ Performance & Smart Caching
-- **LRU Memory Governor:** 350-entry thread-safe memory cache prevents out-of-memory spikes and VRAM bloat on massive 25,000+ pixel webtoon strips.
-- **Persistent HTTP Disk Cache:** 512 MB disk cache ensures instant page loading when re-reading or navigating backwards.
-- **Zero-Lag UI:** Background asynchronous prefetch streams upcoming pages and chapters ahead of your viewport.
+### 🎨 Hardware-Accelerated Image Adjustments
+- **Real-Time Sliders:** Adjust **Contrast**, **Saturation**, and **Brightness** on the fly with live visual feedback.
+- **Invert Colors (Night Mode):** Instant color inversion for comfortable dark-room reading of bright manga pages.
+- **Skia GPU Pipeline:** All image adjustments run directly on your GPU using hardware SkColorFilters with zero CPU overhead.
 
-### 🎨 Personalization & Visual Design
-- **13 Studio Themes:** Void AMOLED, Indigo Night, Sakura, Matcha, Ember, Ocean, Lavender, Crimson, Aurora, Sunset, Graphite, Paper, and Mono with instant preview.
-- **Custom Desktop App Icon:** Select any custom `.png`, `.jpg`, or `.ico` image for the desktop and titlebar directly from Settings, or reset to default with one click.
-- **Cyber-Glassmorphism UI:** Translucent acrylic panels, smooth spring animations, and distraction-free layouts.
+### 🖥️ Fullscreen, Canvas-Wide Scrolling & Clean Chrome
+- **F11 Fullscreen:** Toggle immersive borderless fullscreen anywhere in the application or reader with `F11`.
+- **Canvas-Wide Mouse Scrolling:** Mouse wheel scrolling works anywhere on the window, including margins, letterboxes, and gaps between webtoon strips.
+- **Minimalist Top Chrome:** Cleaned upper navigation bar displaying only the original brand logo.
+- **Reading History Landing View:** The app launches directly into your Reading History shelf on startup.
 
-### 🔄 In-App Updates
-- **Automatic GitHub Checker:** On launch, ZERAVRIX silently checks for newer versions on GitHub.
-- **One-Click Download:** An update badge appears in the titlebar and Settings screen only when an update exists, letting you download the latest installer with a single click.
+### 🌐 Manhwa Exploration & State Preservation
+- **Stateful Source Navigation:** Opening a manhwa from a source and pressing **Back** returns you to your exact browsing state and pixel scroll position without resetting to the source directory.
+- **1000+ Sources & Full Arabic Support:** Instant access to global and Arabic catalogs (MangaSpark, MangaSwat, Team X, Azora, Hijala, 3asq, Komga, Kavita, and more).
+- **Persistent Source Pinning:** Pin preferred sources to the Explore screen with saved state across restarts.
 
-### 📁 Offline Reading
-- **CBZ & ZIP Archive Support:** Drag and drop local `.cbz`, `.zip`, and `.cbr` comic archives directly into your library.
-- **Automatic Cover Extraction:** Generates high-resolution library covers from comic archives automatically.
+### 📦 Flathub & Flatpak Packaging
+- **Production-Ready Flatpak Manifest:** Fully configured `org.zeravrix.ZERAVRIX.yml` ready for official Flathub submission.
+- **Bundled OpenJDK 21 & Skia Acceleration:** Sandboxed, safe execution across Fedora, Ubuntu, Arch, and SteamOS without manual dependency installation.
 
 ---
 
 ## 📥 Download & Installation
 
-Visit the [**Latest GitHub Release (v1.7.1)**](https://github.com/zeravrix/ZERAVRIX-PC/releases/tag/v1.7.1) to download the package for your platform:
+Visit the [**Latest GitHub Release (v1.7.2)**](https://github.com/zeravrix/ZERAVRIX-PC/releases/tag/v1.7.2) to download the package for your platform:
 
 | Platform | Package | Description |
 | :--- | :--- | :--- |
-| **Windows 10 / 11** | `ZERAVRIX-1.7.1-Setup.exe` | **Recommended:** Standalone Windows installer with desktop shortcut and Start menu registration |
-| **Windows Portable** | `ZERAVRIX-1.7.1-portable.zip` | No installation required. Extract anywhere and launch `ZERAVRIX.exe` |
-| **Linux (Fedora / RHEL)** | `ZERAVRIX-1.7.1-Linux-Fedora.tar.gz` | Native bundle with OpenGL hardware acceleration launcher, desktop entry, and RPM spec |
-| **Linux (Fedora Archive)** | `ZERAVRIX-1.7.1-Linux-Fedora.zip` | Standard ZIP archive for manual extraction and desktop integration |
+| **Windows 10 / 11** | `ZERAVRIX-1.7.2-Setup.exe` | **Recommended:** Standalone Windows installer with desktop shortcut and Start menu registration |
+| **Windows Portable** | `ZERAVRIX-1.7.2-portable.zip` | No installation required. Extract anywhere and launch `ZERAVRIX.exe` |
+| **Linux (Flatpak / Flathub)** | `org.zeravrix.ZERAVRIX.flatpak` | Sandboxed, dependency-free bundle for all modern Linux distributions |
+| **Linux (Fedora / RHEL RPM)** | `zeravrix-1.7.2-1.x86_64.rpm` | Native RPM package with system launcher and menu integration |
+| **Linux (Tarball Bundle)** | `ZERAVRIX-1.7.2-Linux-Fedora.tar.gz` | Portable Linux bundle with low-RAM G1GC launcher script |
 
 ### Running on Linux (Fedora / RHEL / Ubuntu)
 
@@ -79,8 +80,8 @@ Visit the [**Latest GitHub Release (v1.7.1)**](https://github.com/zeravrix/ZERAV
    ```
 2. Extract the archive:
    ```bash
-   tar -xzf ZERAVRIX-1.7.1-Linux-Fedora.tar.gz
-   cd zeravrix-1.7.1-linux
+   tar -xzf ZERAVRIX-1.7.2-Linux-Fedora.tar.gz
+   cd zeravrix-1.7.2-linux
    ```
 3. Launch ZERAVRIX:
    ```bash
@@ -98,7 +99,7 @@ ZERAVRIX
 ├── reader/         High-performance comic reader, webtoon strip engine, LRU bitmap cache
 ├── core/           Domain models, asynchronous stores, library persistence & updater
 ├── source-api/     Desktop source provider contracts and dynamic extension runtime
-├── distribution/   Linux desktop entries, launcher scripts, and RPM spec
+├── distribution/   Linux desktop entries, Flatpak manifest, RPM spec, and launchers
 └── installer/      Windows Inno Setup and WiX packaging definitions
 ```
 
@@ -115,18 +116,18 @@ ZERAVRIX
 
 ```powershell
 # 1. Compile all Kotlin modules
-.\gradlew.bat compileKotlin
+./gradlew compileKotlin
 
 # 2. Run unit tests
-.\gradlew.bat test
+./gradlew test
 
 # 3. Create standalone portable distribution
-.\gradlew.bat :desktop-app:createDistributable
+./gradlew :desktop-app:createDistributable
 # Output: desktop-app/build/compose/binaries/main/app/zeravrix/
 
 # 4. Generate standalone Windows Setup Installer (.exe)
-.\gradlew.bat :desktop-app:packageExe
-# Output: desktop-app/build/compose/binaries/main/exe/zeravrix-1.7.1.exe
+./gradlew :desktop-app:packageExe
+# Output: desktop-app/build/compose/binaries/main/exe/zeravrix-1.7.2.exe
 ```
 
 ---

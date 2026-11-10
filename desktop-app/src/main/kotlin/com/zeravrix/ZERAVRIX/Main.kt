@@ -32,6 +32,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -138,7 +142,7 @@ fun main() = application {
     val downloader = remember { DesktopDownloader(appDir) }
 
     val scope = rememberCoroutineScope()
-    var currentScreen by remember { mutableStateOf(AppNavScreen.EXPLORE) }
+    var currentScreen by remember { mutableStateOf(AppNavScreen.HISTORY) }
     var searchQuery by remember { mutableStateOf("") }
     var activeMangaForDetail by remember { mutableStateOf<Manga?>(null) }
     var activeReader by remember { mutableStateOf<ActiveReaderSession?>(null) }
@@ -275,20 +279,34 @@ fun main() = application {
         }
     }
 
+    fun toggleFullscreen() {
+        windowState.placement = if (windowState.placement == WindowPlacement.Fullscreen) {
+            WindowPlacement.Floating
+        } else {
+            WindowPlacement.Fullscreen
+        }
+    }
+
     Window(
         onCloseRequest = ::exitApplication,
         state = windowState,
-        title = "ZERAVRIX • Native Windows Manga & Manhwa Reader",
+        title = "ZERAVRIX • Native PC Manga & Manhwa Reader",
         icon = appIcon,
-        undecorated = true,
+        undecorated = windowState.placement != WindowPlacement.Fullscreen,
         resizable = true,
+        onKeyEvent = { keyEvent ->
+            if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.F11) {
+                toggleFullscreen()
+                true
+            } else false
+        }
     ) {
         CompositionLocalProvider(
             LocalGlassTokens provides tokens,
             LocalLayoutDirection provides (if (isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr)
         ) {
             MaterialTheme(colorScheme = createMaterialColorScheme(tokens)) {
-                val isMaximized = windowState.placement == WindowPlacement.Maximized
+                val isMaximized = windowState.placement == WindowPlacement.Maximized || windowState.placement == WindowPlacement.Fullscreen
                 val outerCorner = if (isMaximized) RoundedCornerShape(0.dp) else RoundedCornerShape(12.dp)
 
                 Box(
@@ -318,54 +336,9 @@ fun main() = application {
                             }
                         )
 
-                        // Main Workspace, Split-Pane Details, or Native PC Reader
-                        if (activeReader != null) {
-                            val session = activeReader!!
-                            DesktopReaderView(
-                                mangaTitle = session.manga.title,
-                                initialChapter = session.chapter,
-                                allChapters = session.allChapters,
-                                initialPages = session.pages,
-                                initialPage = session.initialPage,
-                                initialMode = settings.readerMode,
-                                onFetchPages = { ch ->
-                                    val downloaded = downloader.downloadedChapters(session.manga.id).firstOrNull { it.chapterId == ch.id }
-                                    if (downloaded != null) {
-                                        downloader.localPages(downloaded)
-                                    } else {
-                                        sourceRegistry.fetchPages(ch)
-                                    }
-                                },
-                                onClose = {
-                                    activeReader = null
-                                    shelfRefresh++
-                                },
-                                onPageChanged = { ch, pageIndex ->
-                                    libraryStore.saveProgress(
-                                        ReadingProgress(
-                                            mangaId = session.manga.id,
-                                            chapterId = ch.id,
-                                            pageIndex = pageIndex,
-                                            chapterNumber = ch.number,
-                                            updatedAt = System.currentTimeMillis()
-                                        )
-                                    )
-                                }
-                            )
-                        } else if (activeMangaForDetail != null) {
-                            val detailManga = activeMangaForDetail!!
-                            DetailsScreen(
-                                manga = detailManga,
-                                sourceRegistry = sourceRegistry,
-                                libraryStore = libraryStore,
-                                downloader = downloader,
-                                onBack = {
-                                    activeMangaForDetail = null
-                                    shelfRefresh++
-                                },
-                                onRead = { chapter, startPage -> openChapter(detailManga, chapter, startPage) }
-                            )
-                        } else {
+                        // Main Workspace Area with Overlay Architecture for Details and Reader:
+                        // Preserves ExploreScreen and source browsing scroll state when opening manga and returning.
+                        Box(modifier = Modifier.fillMaxSize()) {
                             Row(modifier = Modifier.fillMaxSize()) {
                                 // Left Navigation Rail
                                 AppNavigationRail(
@@ -459,7 +432,7 @@ fun main() = application {
                                     }
 
                                     // Prominent Floating Continue Reading Button at Bottom-Right
-                                    if (latestReadPair != null && currentScreen != AppNavScreen.SETTINGS) {
+                                    if (latestReadPair != null && currentScreen != AppNavScreen.SETTINGS && activeMangaForDetail == null && activeReader == null) {
                                         val (manga, progress) = latestReadPair!!
                                         FloatingContinueReadingButton(
                                             manga = manga,
@@ -471,6 +444,59 @@ fun main() = application {
                                         )
                                     }
                                 }
+                            }
+
+                            // Detail Screen Overlay
+                            if (activeMangaForDetail != null && activeReader == null) {
+                                val detailManga = activeMangaForDetail!!
+                                DetailsScreen(
+                                    manga = detailManga,
+                                    sourceRegistry = sourceRegistry,
+                                    libraryStore = libraryStore,
+                                    downloader = downloader,
+                                    onBack = {
+                                        activeMangaForDetail = null
+                                        shelfRefresh++
+                                    },
+                                    onRead = { chapter, startPage -> openChapter(detailManga, chapter, startPage) }
+                                )
+                            }
+
+                            // Full-screen Reader Overlay
+                            if (activeReader != null) {
+                                val session = activeReader!!
+                                DesktopReaderView(
+                                    mangaTitle = session.manga.title,
+                                    initialChapter = session.chapter,
+                                    allChapters = session.allChapters,
+                                    initialPages = session.pages,
+                                    initialPage = session.initialPage,
+                                    initialMode = settings.readerMode,
+                                    onFetchPages = { ch ->
+                                        val downloaded = downloader.downloadedChapters(session.manga.id).firstOrNull { it.chapterId == ch.id }
+                                        if (downloaded != null) {
+                                            downloader.localPages(downloaded)
+                                        } else {
+                                            sourceRegistry.fetchPages(ch)
+                                        }
+                                    },
+                                    onClose = {
+                                        activeReader = null
+                                        shelfRefresh++
+                                    },
+                                    onToggleFullscreen = ::toggleFullscreen,
+                                    onPageChanged = { ch, pageIndex ->
+                                        libraryStore.saveProgress(
+                                            ReadingProgress(
+                                                mangaId = session.manga.id,
+                                                chapterId = ch.id,
+                                                pageIndex = pageIndex,
+                                                chapterNumber = ch.number,
+                                                updatedAt = System.currentTimeMillis()
+                                            )
+                                        )
+                                    }
+                                )
                             }
                         }
                     }
