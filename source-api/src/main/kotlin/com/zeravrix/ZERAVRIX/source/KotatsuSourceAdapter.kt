@@ -19,8 +19,8 @@ class KotatsuSourceAdapter(
 
     override val id: Long = 10_000L + parserSource.ordinal
     override val name: String = parserSource.title
-    override val language: String = parserSource.locale
-    override val baseUrl: String = parserSource.name.lowercase()
+    override val language: String = parserSource.locale.ifBlank { "multi" }
+    override val baseUrl: String get() = "https://$domain"
 
     val domain: String by lazy {
         runCatching {
