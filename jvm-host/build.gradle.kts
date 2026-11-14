@@ -10,6 +10,9 @@ kotlin { jvmToolchain(21) }
 dependencies {
     implementation(project(":core"))
     implementation(project(":source-api"))
+    implementation("com.github.KotatsuApp:kotatsu-parsers:4d1e521aef") {
+        exclude(group = "org.json", module = "json")
+    }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation(kotlin("test"))
 }

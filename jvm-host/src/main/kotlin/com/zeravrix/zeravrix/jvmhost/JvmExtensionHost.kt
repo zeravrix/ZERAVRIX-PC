@@ -218,15 +218,26 @@ class JvmExtensionHost(
 }
 
 private object BuiltInSources {
-    fun create(root: Path): List<Source> = listOf(
-        MangaSparkMihonSource(),
-        MangalekMihonSource(),
-        TeamXMihonSource(),
-        MangaSwatMihonSource(),
-        HijalaMihonSource(root),
-        DilarMihonSource(),
-        AzoraMihonSource(),
-        KomgaSource(root),
-        KavitaSource(root),
-    )
+    fun create(root: Path): List<Source> {
+        val base = listOf(
+            MangaSparkMihonSource(),
+            MangalekMihonSource(),
+            TeamXMihonSource(),
+            MangaSwatMihonSource(),
+            HijalaMihonSource(root),
+            DilarMihonSource(),
+            AzoraMihonSource(),
+            KomgaSource(root),
+            KavitaSource(root),
+        )
+        return try {
+            val loaderContext = com.zeravrix.zeravrix.source.HeadlessMangaLoaderContext(root)
+            val kotatsu = org.koitharu.kotatsu.parsers.model.MangaParserSource.entries
+                .filter { !it.isBroken && it.contentType != org.koitharu.kotatsu.parsers.model.ContentType.HENTAI }
+                .map { com.zeravrix.zeravrix.source.KotatsuSourceAdapter(it, loaderContext) }
+            base + kotatsu
+        } catch (_: Throwable) {
+            base
+        }
+    }
 }
